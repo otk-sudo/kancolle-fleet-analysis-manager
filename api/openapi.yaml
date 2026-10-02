@@ -1,0 +1,657 @@
+openapi: 3.1.0
+info:
+  title: 艦隊分析 応募者管理API
+  version: 0.1.0
+  description: 艦隊分析への応募を管理するAPI。仕様は docs/spec.md を参照。
+servers:
+  - url: https://api.example.com
+    description: 本番（ドメインは未定）
+security:
+  - cognito: []
+tags:
+  - name: intake
+  - name: applications
+  - name: applicants
+  - name: stream
+  - name: lotteries
+  - name: settings
+  - name: users
+  - name: imports
+paths:
+  /intake/applications:
+    post:
+      tags: [intake]
+      operationId: submitApplication
+      summary: Googleフォームからの応募受付
+      security:
+        - formKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntakeRequest'
+      responses:
+        '201':
+          description: 受付完了
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntakeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /applications:
+    get:
+      tags: [applications]
+      operationId: listApplications
+      summary: 応募一覧
+      parameters:
+        - name: status
+          in: query
+          description: ステータスで絞り込み（複数可）
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/StatusCode'
+          style: form
+          explode: true
+        - name: purpose
+          in: query
+          schema:
+            type: string
+        - name: flag
+          in: query
+          schema:
+            $ref: '#/components/schemas/FlagType'
+        - name: order
+          in: query
+          description: queue=次に分析する順、received=受付順
+          schema:
+            type: string
+            enum: [queue, received]
+            default: queue
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 一覧
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /applications/{applicationId}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [applications]
+      operationId: getApplication
+      summary: 応募詳細
+      responses:
+        '200':
+          description: 詳細
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [applications]
+      operationId: updateApplication
+      summary: ステータス・配信日・メモの変更（配信者・運営）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationUpdate'
+      responses:
+        '200':
+          description: 更新後の応募
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /applications/{applicationId}/position:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    put:
+      tags: [applications]
+      operationId: moveApplication
+      summary: 次に分析する順の並べ替え（配信者・運営）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 指定した応募の直後に移動する。afterがnullなら先頭へ
+              properties:
+                after:
+                  type: [string, 'null']
+              required: [after]
+      responses:
+        '204':
+          description: 並べ替え完了
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /applicants/{xId}/applications:
+    parameters:
+      - $ref: '#/components/parameters/XId'
+    get:
+      tags: [applicants]
+      operationId: listApplicantHistory
+      summary: 同じ応募者の応募履歴（過去応募との比較用）
+      responses:
+        '200':
+          description: 履歴（新しい順）
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Application'
+  /applicants/{xId}:
+    parameters:
+      - $ref: '#/components/parameters/XId'
+    delete:
+      tags: [applicants]
+      operationId: deleteApplicant
+      summary: 削除依頼への対応（運営）
+      responses:
+        '204':
+          description: 削除完了
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /stream/current:
+    get:
+      tags: [stream]
+      operationId: getStreamView
+      summary: 配信用画面の表示内容（いま分析中の1人）
+      responses:
+        '200':
+          description: 表示内容。分析中の人がいなければ current は null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamView'
+  /lotteries:
+    get:
+      tags: [lotteries]
+      operationId: listLotteries
+      summary: 抽選記録
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 抽選記録（新しい順）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Lottery'
+                  nextCursor:
+                    type: [string, 'null']
+                required: [items, nextCursor]
+    post:
+      tags: [lotteries]
+      operationId: runLottery
+      summary: 抽選の実行（配信者・運営）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LotteryRequest'
+      responses:
+        '201':
+          description: 抽選結果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lottery'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: 抽選がオフ、または対象者がいない
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /settings/{kind}:
+    parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [options, statuses, rules, lottery]
+    get:
+      tags: [settings]
+      operationId: getSettings
+      summary: 設定の取得
+      responses:
+        '200':
+          description: 設定
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+    put:
+      tags: [settings]
+      operationId: putSettings
+      summary: 設定の変更（配信者・運営）。versionが一致しないと409
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '200':
+          description: 更新後の設定
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /users:
+    get:
+      tags: [users]
+      operationId: listUsers
+      summary: ユーザー一覧（配信者・運営）
+      responses:
+        '200':
+          description: ユーザー一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags: [users]
+      operationId: createUser
+      summary: ユーザー追加（配信者は関係者のみ、運営は全役割）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: ログイン用（応募者ではなくツール利用者のもの）
+                displayName:
+                  type: string
+                role:
+                  $ref: '#/components/schemas/Role'
+              required: [email, displayName, role]
+      responses:
+        '201':
+          description: 追加完了
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [users]
+      operationId: deleteUser
+      summary: ユーザー削除（配信者は関係者のみ、運営は全役割）
+      responses:
+        '204':
+          description: 削除完了
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /imports/csv:
+    post:
+      tags: [imports]
+      operationId: importCsv
+      summary: 旧スプレッドシートのCSV取り込み（運営）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  contentMediaType: text/csv
+                mapping:
+                  type: string
+                  description: 列名と新項目の対応表（JSON文字列）
+                formVersion:
+                  type: string
+              required: [file, mapping, formVersion]
+      responses:
+        '200':
+          description: 取り込み結果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: integer
+                  skipped:
+                    type: integer
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row:
+                          type: integer
+                        message:
+                          type: string
+                required: [imported, skipped, errors]
+components:
+  securitySchemes:
+    cognito:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: CognitoのIDトークン。グループ（admin/streamer/staff）で権限を判定
+    formKey:
+      type: apiKey
+      in: header
+      name: X-Form-Key
+      description: Apps Scriptだけが持つ秘密キー
+  parameters:
+    ApplicationId:
+      name: applicationId
+      in: path
+      required: true
+      schema:
+        type: string
+    XId:
+      name: xId
+      in: path
+      required: true
+      description: 正規化済みのXのID（@なし、小文字）
+      schema:
+        type: string
+        pattern: '^[a-z0-9_]{1,15}$'
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+  responses:
+    BadRequest:
+      description: 入力が不正
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unauthorized:
+      description: 認証が必要
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: 権限がない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: 見つからない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Conflict:
+      description: 競合（許されないステータス遷移、設定の版ずれなど）
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    ApiError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required: [code, message]
+    StatusCode:
+      type: string
+      description: ステータスのコード。設定で追加できるため enum にしない（初期値 pending/scheduled/analyzing/done/skipped/lost）
+    FlagType:
+      type: string
+      enum: [duplicate, reapply, ineligible]
+    Role:
+      type: string
+      enum: [admin, streamer, staff]
+    Answers:
+      type: object
+      description: フォーム回答。キーは設定の項目コード。版ごとに項目が変わるため自由形式
+      additionalProperties: true
+    IntakeRequest:
+      type: object
+      properties:
+        submissionId:
+          type: string
+          description: フォームの回答ID。同じIDの再送は1件として扱う
+        submittedAt:
+          type: string
+          format: date-time
+        formVersion:
+          type: string
+        answers:
+          $ref: '#/components/schemas/Answers'
+      required: [submissionId, submittedAt, formVersion, answers]
+    IntakeResponse:
+      type: object
+      properties:
+        applicationId:
+          type: string
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flag'
+      required: [applicationId, flags]
+    Flag:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/FlagType'
+        reason:
+          type: string
+        relatedApplicationId:
+          type: [string, 'null']
+      required: [type, reason]
+    Application:
+      type: object
+      properties:
+        id:
+          type: string
+        xId:
+          type: string
+        admiralName:
+          type: string
+        anonymous:
+          type: boolean
+        simulatorUrl:
+          type: string
+          format: uri
+        status:
+          $ref: '#/components/schemas/StatusCode'
+        streamDate:
+          type: [string, 'null']
+          format: date
+        memo:
+          type: string
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flag'
+        formVersion:
+          type: string
+        answers:
+          $ref: '#/components/schemas/Answers'
+        receivedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, xId, admiralName, anonymous, simulatorUrl, status, flags, formVersion, answers, receivedAt, updatedAt]
+    ApplicationPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Application'
+        nextCursor:
+          type: [string, 'null']
+      required: [items, nextCursor]
+    ApplicationUpdate:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/StatusCode'
+        streamDate:
+          type: [string, 'null']
+          format: date
+        memo:
+          type: string
+    StreamView:
+      type: object
+      properties:
+        current:
+          oneOf:
+            - $ref: '#/components/schemas/StreamApplicant'
+            - type: 'null'
+      required: [current]
+    StreamApplicant:
+      type: object
+      description: 配信に映す情報のみ。XのIDと課金額は含めない
+      properties:
+        displayName:
+          type: string
+          description: 匿名希望なら「匿名提督」など
+        simulatorUrl:
+          type: string
+          format: uri
+        answers:
+          $ref: '#/components/schemas/Answers'
+        previous:
+          oneOf:
+            - $ref: '#/components/schemas/Answers'
+            - type: 'null'
+          description: 前回応募の回答（比較用）
+      required: [displayName, simulatorUrl, answers, previous]
+    LotteryRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [bulk, live]
+          description: bulk=まとめ抽選（外れは落選）、live=配信中に1人
+        winners:
+          type: integer
+          minimum: 1
+          description: bulkのときの当選人数（liveは常に1）
+        includeFlagged:
+          type: array
+          description: 印つきでも対象に含める応募ID
+          items:
+            type: string
+      required: [mode]
+    Lottery:
+      type: object
+      properties:
+        id:
+          type: string
+        mode:
+          type: string
+          enum: [bulk, live]
+        executedAt:
+          type: string
+          format: date-time
+        executedBy:
+          type: string
+        seed:
+          type: string
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              applicationId:
+                type: string
+              weight:
+                type: number
+              won:
+                type: boolean
+            required: [applicationId, weight, won]
+      required: [id, mode, executedAt, executedBy, seed, entries]
+    Settings:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [options, statuses, rules, lottery]
+        version:
+          type: integer
+          description: 楽観ロック用の版
+        value:
+          type: object
+          additionalProperties: true
+      required: [kind, version, value]
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+      required: [id, email, displayName, role]
