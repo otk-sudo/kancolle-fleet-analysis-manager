@@ -10,4 +10,5 @@
 - コメント、ドキュメント、コミット、PRは日本語。識別子は英語
 - APIを変えるときは api/openapi.yaml を先に変える。生成コードは手で編集しない
 - backend/domain は Spring・AWS に依存させない
+- PRはCIが通ったらレビューエージェントでレビューし、指摘を直してから開発者の最終確認に回す
 - 変更前に `./gradlew build` と `cd frontend && npm run lint && npm run build` を通す
