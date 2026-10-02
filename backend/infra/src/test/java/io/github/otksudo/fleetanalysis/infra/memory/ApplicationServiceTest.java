@@ -14,8 +14,13 @@ import io.github.otksudo.fleetanalysis.domain.application.StreamView;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -131,5 +136,26 @@ class ApplicationServiceTest {
 
         service.deleteApplicant(new XId("a"));
         assertThat(repository.findAll()).extracting(app -> app.xId().value()).containsExactly("b");
+    }
+
+    @Test
+    void 同じ回答が同時に何度届いても1件だけ登録する() throws Exception {
+        // 8つのスレッド（同時に動く処理）から、同じ回答IDの応募を一斉に送る
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Application>> results = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            results.add(executor.submit(() -> {
+                start.await(); // 全員そろってから同時に始める
+                return submit("same", "@a", "2026-10-01T10:00:00Z");
+            }));
+        }
+        start.countDown();
+        for (Future<Application> result : results) {
+            result.get();
+        }
+        executor.shutdown();
+
+        assertThat(repository.findAll()).hasSize(1);
     }
 }

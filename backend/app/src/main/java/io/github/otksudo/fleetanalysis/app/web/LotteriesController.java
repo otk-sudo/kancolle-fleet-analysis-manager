@@ -11,6 +11,7 @@ import io.github.otksudo.fleetanalysis.domain.lottery.LotteryService;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,8 +55,12 @@ public class LotteriesController implements LotteriesApi {
             }
             winners = request.getWinners();
         }
-        LotteryRecord record = lotteryService.run(
-                mode, winners, new HashSet<>(request.getIncludeFlagged()), PROTOTYPE_USER);
+        // includeFlagged は省略できる項目。JSONで null が送られても動くようにする
+        Set<String> includeFlagged = new HashSet<>();
+        if (request.getIncludeFlagged() != null) {
+            includeFlagged.addAll(request.getIncludeFlagged());
+        }
+        LotteryRecord record = lotteryService.run(mode, winners, includeFlagged, PROTOTYPE_USER);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiMapper.toApi(record));
     }
 }

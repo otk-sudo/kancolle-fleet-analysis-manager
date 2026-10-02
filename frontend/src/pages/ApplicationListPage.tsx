@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { fetchAllApplications } from '../api/applications'
 import { api } from '../api/client'
 import { errorMessage, type Application, type FlagType } from '../api/types'
 import FlagBadges from '../components/FlagBadges'
@@ -24,32 +25,37 @@ function ApplicationListPage() {
   // useCallback: 絞り込み条件が変わったときだけ、新しい load 関数を作り直す（下の useEffect が反応するため）
   const load = useCallback(async () => {
     const status = statusFilter === 'open' ? OPEN_STATUSES : statusFilter === 'all' ? undefined : [statusFilter]
-    const { data, error } = await api.GET('/applications', {
-      params: {
-        query: {
-          status,
-          purpose: purpose || undefined,
-          flag: (flag || undefined) as FlagType | undefined,
-          order,
-          limit: 200,
-        },
-      },
+    const { items, error } = await fetchAllApplications({
+      status,
+      purpose: purpose || undefined,
+      flag: (flag || undefined) as FlagType | undefined,
+      order,
     })
-    if (error || !data) {
-      setError(errorMessage(error))
+    return { items, error }
+  }, [statusFilter, purpose, flag, order])
+
+  /** 読み込んだ結果を画面に反映する */
+  const applyResult = useCallback((result: { items: Application[]; error?: unknown }) => {
+    if (result.error) {
+      setError(errorMessage(result.error))
       return
     }
     setError('')
-    setItems(data.items)
-  }, [statusFilter, purpose, flag, order])
+    setItems(result.items)
+  }, [])
 
   // useEffect: 画面を表示したときと、load が変わったとき（＝絞り込み条件が変わったとき）にデータを読み込む
   useEffect(() => {
-    // APIからの読み込みは「外部との同期」なので effect で行う。setState は通信が終わった後（非同期）に呼ばれるため、
-    // lint が心配する「描画の連鎖」は起きない
-    // oxlint-disable-next-line react/set-state-in-effect
-    void load()
-  }, [load])
+    // 絞り込みを素早く切り替えると、古い条件の結果が後から届くことがある。
+    // 後片付け（return の関数）で ignore を true にし、古い結果は画面に反映しない
+    let ignore = false
+    void load().then((result) => {
+      if (!ignore) applyResult(result)
+    })
+    return () => {
+      ignore = true
+    }
+  }, [load, applyResult])
 
   /** 同じステータスの中で1つ上（direction=-1）または1つ下（+1）へ動かす */
   async function move(target: Application, direction: -1 | 1) {
@@ -72,7 +78,7 @@ function ApplicationListPage() {
       setError(errorMessage(error))
       return
     }
-    await load()
+    applyResult(await load())
   }
 
   // 目的や印で絞り込んでいると、見えていない応募をまたいで動かすことになるため、並べ替えは絞り込みなしのときだけにする

@@ -1,5 +1,7 @@
 package io.github.otksudo.fleetanalysis.domain.application;
 
+import java.util.List;
+
 /**
  * フォーム回答の項目コード（gas/Code.gs の ITEM_CODES と同じ）。
  *
@@ -18,6 +20,22 @@ public final class AnswerKeys {
 
     /** 匿名を希望するときの回答 */
     public static final String ANONYMOUS_ANSWER = "匿名希望";
+
+    /**
+     * 配信用画面に出してよい項目（仕様 7.2）。XのID、課金額、名前の出し方はここに入れない。
+     * TODO(段階7): 設定データで変えられるようにする
+     */
+    public static final List<String> STREAM_VISIBLE = List.of(
+            "startedAt",
+            "activePeriod",
+            "dailyPlayTime",
+            "rankingEffort",
+            "rankingEffortOther",
+            "hasRestrictions",
+            "restrictions",
+            "goal",
+            PURPOSE,
+            "comment");
 
     private AnswerKeys() {
     }

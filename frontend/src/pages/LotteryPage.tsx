@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
+import { fetchAllApplications } from '../api/applications'
 import { api } from '../api/client'
 import { errorMessage, type Application, type Lottery, type Settings } from '../api/types'
 import { formatDateTime } from '../labels'
@@ -22,20 +23,20 @@ function LotteryPage() {
     const [settingsResponse, lotteriesResponse, applicationsResponse] = await Promise.all([
       api.GET('/settings/{kind}', { params: { path: { kind: 'lottery' } } }),
       api.GET('/lotteries', { params: { query: { limit: 20 } } }),
-      api.GET('/applications', { params: { query: { limit: 200, order: 'received' } } }),
+      fetchAllApplications({ order: 'received' }),
     ])
-    if (!settingsResponse.data || !lotteriesResponse.data || !applicationsResponse.data) {
+    if (!settingsResponse.data || !lotteriesResponse.data || applicationsResponse.error) {
       setError(errorMessage(settingsResponse.error ?? lotteriesResponse.error ?? applicationsResponse.error))
       return
     }
     setSettings(settingsResponse.data)
     setLotteries(lotteriesResponse.data.items)
     const byId: Record<string, Application> = {}
-    for (const application of applicationsResponse.data.items) {
+    for (const application of applicationsResponse.items) {
       byId[application.id] = application
     }
     setApplications(byId)
-    setPendingCount(applicationsResponse.data.items.filter((a) => a.status === 'pending').length)
+    setPendingCount(applicationsResponse.items.filter((a) => a.status === 'pending').length)
   }, [])
 
   useEffect(() => {

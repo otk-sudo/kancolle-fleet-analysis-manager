@@ -21,9 +21,11 @@ BACKEND_PID=$!
 trap 'echo "バックエンドを止めています..."; kill "$BACKEND_PID" 2>/dev/null || true' EXIT
 
 # バックエンドが応答するまで、1秒ごとに確かめる（最大5分）
+started=false
 for _ in $(seq 1 300); do
   if curl -fs http://localhost:8080/applications > /dev/null; then
     echo "バックエンドが起動しました。ログは backend.log にあります"
+    started=true
     break
   fi
   if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
@@ -32,6 +34,10 @@ for _ in $(seq 1 300); do
   fi
   sleep 1
 done
+if [ "$started" != true ]; then
+  echo "5分待ってもバックエンドが応答しませんでした。backend.log を確認してください" >&2
+  exit 1
+fi
 
 echo "画面を起動します。表示された http://localhost:5173 を開いてください"
 cd frontend

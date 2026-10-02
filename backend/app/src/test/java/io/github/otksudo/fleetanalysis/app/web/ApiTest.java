@@ -9,7 +9,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import java.net.URI;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -71,6 +74,17 @@ class ApiTest {
                         .content(intakeJson("s1", "@test_user")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("unauthorized"));
+    }
+
+    @ParameterizedTest
+    // URLの書き方を変えても秘密キーの確認をすり抜けられないこと（%69 は i を別の書き方にしたもの、;a=b は付け足し）
+    @ValueSource(strings = {"/%69ntake/applications", "/intake;a=b/applications", "/intake/applications;a=b"})
+    void URLの書き方を変えても秘密キーの確認はすり抜けられない(String path) throws Exception {
+        mockMvc.perform(post(URI.create(path))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(intakeJson("s1", "@test_user")))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/applications")).andExpect(jsonPath("$.items", hasSize(0)));
     }
 
     @Test
@@ -162,6 +176,49 @@ class ApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(settings.formatted(1)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void おかしな設定値やnullの項目は400や正常な結果になる() throws Exception {
+        mockMvc.perform(put("/settings/lottery")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"kind\": \"lottery\", \"version\": 1, \"value\": "
+                                + "{\"enabled\": true, \"lossBonusEnabled\": true, \"lossBonusStrength\": -1}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_value"));
+
+        submit("s1", "@user_a");
+        mockMvc.perform(post("/lotteries")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mode\": \"bulk\", \"winners\": 1, \"includeFlagged\": null}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void 分析予定に変えた応募はそのグループの最後尾に入る() throws Exception {
+        String a = submit("s1", "@user_a");
+        String b = submit("s2", "@user_b");
+        String c = submit("s3", "@user_c");
+        changeStatus(a, "scheduled");
+        changeStatus(b, "scheduled");
+        // c を未着手の先頭へ動かす（並び順が 1000 に振り直される）
+        mockMvc.perform(put("/applications/" + c + "/position")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"after\": null}"))
+                .andExpect(status().isNoContent());
+        changeStatus(c, "scheduled");
+
+        mockMvc.perform(get("/applications").param("status", "scheduled"))
+                .andExpect(jsonPath("$.items[0].id").value(a))
+                .andExpect(jsonPath("$.items[1].id").value(b))
+                .andExpect(jsonPath("$.items[2].id").value(c));
+    }
+
+    private void changeStatus(String id, String status) throws Exception {
+        mockMvc.perform(patch("/applications/" + id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\": \"" + status + "\"}"))
+                .andExpect(status().isOk());
     }
 
     @Test

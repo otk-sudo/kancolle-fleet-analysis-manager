@@ -38,6 +38,8 @@ public class Application {
     /** 抽選で当選したか。落選補正のリセットに使う（仕様 6.3） */
     private boolean wonLottery;
     private Instant updatedAt;
+    /** 最後にステータスを変えた日時。配信用画面で「最後に分析中にした人」を選ぶのに使う（メモの変更では変わらない） */
+    private Instant statusChangedAt;
 
     public Application(
             String id,
@@ -64,6 +66,7 @@ public class Application {
         this.status = ApplicationStatus.PENDING;
         this.position = receivedAt.toEpochMilli();
         this.updatedAt = receivedAt;
+        this.statusChangedAt = receivedAt;
     }
 
     /**
@@ -79,6 +82,7 @@ public class Application {
         }
         this.status = next;
         this.updatedAt = now;
+        this.statusChangedAt = now;
     }
 
     public void changeStreamDate(LocalDate streamDate, Instant now) {
@@ -95,6 +99,10 @@ public class Application {
         this.position = position;
     }
 
+    /**
+     * 抽選で当選した印をつける。落選補正のリセットに使う（仕様 6.3）。
+     * 当選後に手でステータスを戻しても印は残す（「一度当選した」事実は変わらないため）。
+     */
     public void markWonLottery() {
         this.wonLottery = true;
     }
@@ -161,6 +169,10 @@ public class Application {
 
     public Instant updatedAt() {
         return updatedAt;
+    }
+
+    public Instant statusChangedAt() {
+        return statusChangedAt;
     }
 
     /** 抽選・並べ替えの対象になる「印」がついているか（重複・条件外）。再応募は問題ないので含めない */

@@ -2,8 +2,10 @@ package io.github.otksudo.fleetanalysis.domain.lottery;
 
 import io.github.otksudo.fleetanalysis.domain.ConflictException;
 import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
+import io.github.otksudo.fleetanalysis.domain.XId;
 import io.github.otksudo.fleetanalysis.domain.application.Application;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationStatus;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -41,6 +43,14 @@ public class LotteryService {
      * @param executedBy     実行した人
      */
     public LotteryRecord run(LotteryMode mode, int winners, Set<String> includeFlagged, String executedBy) {
+        // 応募の変更（ApplicationService）と同じ鍵を使い、2つの抽選や受付・変更が同時に混ざらないようにする。
+        // 途中まで変更して記録が残らない、という事態を防ぐため
+        synchronized (applications) {
+            return runLocked(mode, winners, includeFlagged, executedBy);
+        }
+    }
+
+    private LotteryRecord runLocked(LotteryMode mode, int winners, Set<String> includeFlagged, String executedBy) {
         LotterySettings settings = lotteries.loadSettings().settings();
         if (!settings.enabled()) {
             throw new ConflictException("抽選はオフになっています（設定で変更できます）");
@@ -48,6 +58,11 @@ public class LotteryService {
         int winnerCount = mode == LotteryMode.LIVE ? 1 : winners;
         if (winnerCount < 1) {
             throw new InvalidValueException("当選人数は1人以上にしてください");
+        }
+
+        if (mode == LotteryMode.LIVE && someoneAnalyzing()) {
+            // 分析中の人がいるまま抽選すると、配信用画面にどちらを出すか紛らわしくなるため断る
+            throw new ConflictException("「分析中」の応募があります。先に「分析済み」などに変えてから抽選してください");
         }
 
         List<Application> candidates = candidates(includeFlagged);
@@ -75,6 +90,8 @@ public class LotteryService {
             if (won) {
                 candidate.markWonLottery();
                 candidate.changeStatus(mode == LotteryMode.LIVE ? ApplicationStatus.ANALYZING : ApplicationStatus.SCHEDULED, now);
+                // 「分析予定」の最後尾に並べる（candidates は受付順なので、当選者どうしは受付順になる）
+                ApplicationService.placeAtEndOfGroup(applications, candidate);
             } else if (mode == LotteryMode.BULK) {
                 candidate.changeStatus(ApplicationStatus.LOST, now);
             }
@@ -87,9 +104,12 @@ public class LotteryService {
         return record;
     }
 
-    /** 抽選の対象者: 「未着手」で、印（重複・条件外）がないもの。印つきでも includeFlagged に入っていれば対象。 */
+    /**
+     * 抽選の対象者: 「未着手」で、印（重複・条件外）がないもの。印つきでも includeFlagged に入っていれば対象。
+     * 同じ人（同じXのID）の応募が複数あっても、1人1回分だけ対象にする（受付が早いほうを使う）。
+     */
     private List<Application> candidates(Set<String> includeFlagged) {
-        List<Application> result = new ArrayList<>();
+        List<Application> pending = new ArrayList<>();
         for (Application application : applications.findAll()) {
             if (application.status() != ApplicationStatus.PENDING) {
                 continue;
@@ -97,14 +117,33 @@ public class LotteryService {
             if (application.hasBlockingFlag() && !includeFlagged.contains(application.id())) {
                 continue;
             }
-            result.add(application);
+            pending.add(application);
+        }
+        pending.sort(Comparator.comparing(Application::receivedAt));
+
+        List<Application> result = new ArrayList<>();
+        Set<XId> seen = new HashSet<>();
+        for (Application application : pending) {
+            if (seen.add(application.xId())) {
+                result.add(application);
+            }
         }
         return result;
+    }
+
+    private boolean someoneAnalyzing() {
+        for (Application application : applications.findAll()) {
+            if (application.status() == ApplicationStatus.ANALYZING) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
      * 最後に当選してからの落選回数（仕様 6.3）。
      * 同じXのIDの過去の応募を古い順に見ていき、当選があれば0に戻し、落選なら1足す。
+     * 試作では、手で「落選」にした応募も落選として数える。
      * 抽選画面で「当たりやすさ」の根拠を確かめられるよう、またテストから直接確かめられるよう public にしている。
      */
     public int lossesSinceLastWin(Application candidate) {

@@ -21,34 +21,57 @@ function ApplicationDetailPage() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
+  /** APIから応募と、同じ人の応募の一覧を読み込む（画面にはまだ反映しない） */
   const load = useCallback(async () => {
     const { data, error } = await api.GET('/applications/{applicationId}', {
       params: { path: { applicationId } },
     })
     if (error || !data) {
-      setError(errorMessage(error))
-      return
+      return { error: error ?? 'error' }
     }
-    setApplication(data)
-    setNextStatus('')
-    setStreamDate(data.streamDate ?? '')
-    setMemo(data.memo ?? '')
-
     const historyResponse = await api.GET('/applicants/{xId}/applications', {
       params: { path: { xId: data.xId } },
     })
-    setHistory(historyResponse.data ?? [])
+    return { application: data, history: historyResponse.data ?? [] }
   }, [applicationId])
 
+  /** 読み込んだ結果を画面に反映する */
+  const applyResult = useCallback((result: { application?: Application; history?: Application[]; error?: unknown }) => {
+    if (!result.application) {
+      setError(errorMessage(result.error))
+      return
+    }
+    setApplication(result.application)
+    setHistory(result.history ?? [])
+    setNextStatus('')
+    setStreamDate(result.application.streamDate ?? '')
+    setMemo(result.application.memo ?? '')
+  }, [])
+
   useEffect(() => {
-    // APIからの読み込みは「外部との同期」なので effect で行う。setState は通信が終わった後（非同期）に呼ばれるため、
-    // lint が心配する「描画の連鎖」は起きない
-    // oxlint-disable-next-line react/set-state-in-effect
-    void load()
-  }, [load])
+    // 「同じ人の応募」のリンクで別の応募に移ったとき、前の応募の結果が後から届いて上書きしないよう、
+    // 後片付け（return の関数）で ignore を true にして古い結果を捨てる
+    let ignore = false
+    void load().then((result) => {
+      if (!ignore) {
+        setMessage('')
+        setError('')
+        applyResult(result)
+      }
+    })
+    return () => {
+      ignore = true
+    }
+  }, [load, applyResult])
 
   async function save() {
     if (!application) return
+    if (application.streamDate && !streamDate) {
+      // TODO(段階2): 配信日を消せるようにする（今はAPIで「消す」と「変えない」を区別できない）
+      setMessage('')
+      setError('試作版では配信日を消せません。別の日付を選んでください')
+      return
+    }
     const { error } = await api.PATCH('/applications/{applicationId}', {
       params: { path: { applicationId } },
       body: {
@@ -65,7 +88,7 @@ function ApplicationDetailPage() {
     }
     setError('')
     setMessage('保存しました')
-    await load()
+    applyResult(await load())
   }
 
   if (!application) {

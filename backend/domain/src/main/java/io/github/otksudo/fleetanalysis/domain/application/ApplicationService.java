@@ -42,6 +42,15 @@ public class ApplicationService {
      * <p>同じ回答が2回送られてきた場合（通信のやり直しなど）は、1件目をそのまま返して二重登録しない。
      */
     public Application submit(IntakeCommand command) {
+        // 「同じ回答IDがすでにあるか確かめる」と「保存する」の間に別のリクエストが割り込むと、二重に登録されてしまう。
+        // 保存先を鍵（ロック）にして、同時に1つずつしか動かないようにする（抽選などほかの変更も同じ鍵を使う）。
+        // TODO(段階1): DynamoDBでは「同じIDがなければ書き込む」条件付き書き込みにする
+        synchronized (repository) {
+            return submitLocked(command);
+        }
+    }
+
+    private Application submitLocked(IntakeCommand command) {
         Optional<Application> existing = repository.findBySubmissionId(command.submissionId());
         if (existing.isPresent()) {
             return existing.get();
@@ -162,10 +171,17 @@ public class ApplicationService {
      * @param clearStreamDate true なら配信日を消す（null の「変えない」と区別するため）
      */
     public Application update(String id, ApplicationStatus status, LocalDate streamDate, boolean clearStreamDate, String memo) {
+        synchronized (repository) {
+            return updateLocked(id, status, streamDate, clearStreamDate, memo);
+        }
+    }
+
+    private Application updateLocked(String id, ApplicationStatus status, LocalDate streamDate, boolean clearStreamDate, String memo) {
         Application application = get(id);
         Instant now = clock.instant();
-        if (status != null) {
+        if (status != null && status != application.status()) {
             application.changeStatus(status, now);
+            placeAtEndOfGroup(repository, application);
         }
         if (clearStreamDate) {
             application.changeStreamDate(null, now);
@@ -187,6 +203,15 @@ public class ApplicationService {
      * 試作では、グループの全員の並び順を 1000, 2000, 3000... と振り直すわかりやすい方法をとる。
      */
     public void move(String id, String afterId) {
+        synchronized (repository) {
+            moveLocked(id, afterId);
+        }
+    }
+
+    private void moveLocked(String id, String afterId) {
+        if (id.equals(afterId)) {
+            throw new InvalidValueException("自分自身の後ろには移動できません");
+        }
         Application target = get(id);
         ApplicationStatus group = target.status();
         if (group != ApplicationStatus.PENDING && group != ApplicationStatus.SCHEDULED) {
@@ -227,7 +252,31 @@ public class ApplicationService {
 
     /** 削除依頼への対応（仕様 8.1）。 */
     public void deleteApplicant(XId xId) {
-        repository.deleteByXId(xId);
+        // TODO(段階6): 抽選記録に残る応募IDを「削除済み」に置き換える（仕様 8.1）
+        synchronized (repository) {
+            repository.deleteByXId(xId);
+        }
+    }
+
+    /**
+     * ステータスが「未着手」「分析予定」に変わった応募を、そのグループの最後尾に置く（仕様 5.4）。
+     *
+     * <p>並び順（position）はグループの中だけで意味を持つ。手で並べ替えたグループは 1000, 2000... と振り直されているので、
+     * 別のグループから移ってきた応募の並び順をそのままにすると、先頭など思わぬ場所に入ってしまう。
+     * 抽選で当選して「分析予定」になったときにも使うため、static にして LotteryService からも呼べるようにしている。
+     */
+    public static void placeAtEndOfGroup(ApplicationRepository repository, Application application) {
+        ApplicationStatus group = application.status();
+        if (group != ApplicationStatus.PENDING && group != ApplicationStatus.SCHEDULED) {
+            return;
+        }
+        long max = 0;
+        for (Application other : repository.findAll()) {
+            if (other.status() == group && !other.id().equals(application.id()) && other.position() > max) {
+                max = other.position();
+            }
+        }
+        application.changePosition(max + 1000);
     }
 
     /**
@@ -240,7 +289,8 @@ public class ApplicationService {
             if (application.status() != ApplicationStatus.ANALYZING) {
                 continue;
             }
-            if (current == null || application.updatedAt().isAfter(current.updatedAt())) {
+            // updatedAt（メモの変更でも変わる）ではなく、ステータスを変えた日時で選ぶ
+            if (current == null || application.statusChangedAt().isAfter(current.statusChangedAt())) {
                 current = application;
             }
         }
@@ -261,13 +311,19 @@ public class ApplicationService {
                 current.id(), displayName, current.simulatorUrl(), streamSafeAnswers(current), previous));
     }
 
-    /** 配信に出してはいけない回答（XのID、課金額、名前の出し方）を除く。仕様 7.2 */
+    /**
+     * 配信に出してよい回答だけを取り出す（仕様 7.2）。
+     * 「出してはいけない項目を消す」やり方だと、フォームに項目を足したときに配信へ漏れる恐れがあるため、
+     * 「出してよい項目だけを選ぶ」やり方（許可リスト）にしている。
+     * 名前は匿名希望のときに漏れないよう、answers には入れず displayName だけで出す。
+     */
     private static Map<String, Object> streamSafeAnswers(Application application) {
-        Map<String, Object> answers = new LinkedHashMap<>(application.answers());
-        answers.remove(AnswerKeys.X_ID);
-        answers.remove(AnswerKeys.MONTHLY_SPENDING);
-        answers.remove(AnswerKeys.NAME_DISPLAY);
-        answers.remove(AnswerKeys.ADMIRAL_NAME); // 匿名希望のときに名前が漏れないよう、名前は displayName だけで出す
+        Map<String, Object> answers = new LinkedHashMap<>();
+        for (String key : AnswerKeys.STREAM_VISIBLE) {
+            if (application.answers().containsKey(key)) {
+                answers.put(key, application.answers().get(key));
+            }
+        }
         return answers;
     }
 

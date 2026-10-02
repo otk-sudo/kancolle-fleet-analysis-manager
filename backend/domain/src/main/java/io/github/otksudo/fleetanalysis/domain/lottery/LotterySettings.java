@@ -1,5 +1,7 @@
 package io.github.otksudo.fleetanalysis.domain.lottery;
 
+import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
+
 /**
  * 抽選の設定（仕様 6.1、6.3）。配信者・運営が設定画面で変更できる。
  *
@@ -15,7 +17,7 @@ public record LotterySettings(boolean enabled, boolean lossBonusEnabled, double 
     public LotterySettings {
         // 設定画面からおかしな値（負の数、NaN、無限大）が保存されないよう、作る時点で弾く
         if (!Double.isFinite(lossBonusStrength) || lossBonusStrength < 0) {
-            throw new IllegalArgumentException("lossBonusStrength must be a finite number >= 0: " + lossBonusStrength);
+            throw new InvalidValueException("落選補正の強さは0以上の数にしてください: " + lossBonusStrength);
         }
     }
 

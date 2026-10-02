@@ -119,4 +119,23 @@ class LotteryServiceTest {
         assertThatThrownBy(() -> lotteryService.updateSettings(new LotterySettings(true, true, 2.0), 1))
                 .isInstanceOf(ConflictException.class);
     }
+
+    @Test
+    void 印つきを含めても同じ人は1回分しか抽選の対象にならない() {
+        submit("s1", "a", "2026-10-01T10:00:00Z");
+        Application duplicate = submit("s2", "a", "2026-10-01T11:00:00Z");
+
+        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 5, Set.of(duplicate.id()), "tester");
+        assertThat(record.entries()).hasSize(1);
+    }
+
+    @Test
+    void 分析中の人がいるときは配信中の抽選をしない() {
+        Application analyzing = submit("s1", "a", "2026-10-01T10:00:00Z");
+        submit("s2", "b", "2026-10-01T11:00:00Z");
+        applicationService.update(analyzing.id(), ApplicationStatus.ANALYZING, null, false, null);
+
+        assertThatThrownBy(() -> lotteryService.run(LotteryMode.LIVE, 1, Set.of(), "tester"))
+                .isInstanceOf(ConflictException.class);
+    }
 }
