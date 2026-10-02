@@ -170,17 +170,38 @@ class ApplicationServiceTest {
         service.update(scheduled.id(), ApplicationStatus.SCHEDULED, null, false, null);
 
         // 分析予定が未着手より先
-        Optional<StreamView> view = service.advanceStream();
+        Optional<StreamView> view = service.advanceStream(true);
         assertThat(service.get(current.id()).status()).isEqualTo(ApplicationStatus.DONE);
         assertThat(view).map(StreamView::applicationId).contains(scheduled.id());
 
         // 次は未着手のうち、印のない人
-        view = service.advanceStream();
+        view = service.advanceStream(true);
         assertThat(view).map(StreamView::applicationId).contains(pending.id());
 
         // 待っている人がいなければ（残りは重複の印つきだけ）、分析済みにして空になる
-        view = service.advanceStream();
+        view = service.advanceStream(true);
         assertThat(view).isEmpty();
         assertThat(service.get(pending.id()).status()).isEqualTo(ApplicationStatus.DONE);
+    }
+
+    @Test
+    void 抽選を使う設定なら次の人へは分析予定の人だけから選ぶ() {
+        Application current = submit("s1", "@a", "2026-10-01T09:00:00Z");
+        submit("s2", "@b", "2026-10-01T10:00:00Z");
+        service.update(current.id(), ApplicationStatus.ANALYZING, null, false, null);
+
+        // 分析予定の人がいないので、分析済みにするだけ（未着手の人は抽選で選ぶ）
+        assertThat(service.advanceStream(false)).isEmpty();
+        assertThat(service.get(current.id()).status()).isEqualTo(ApplicationStatus.DONE);
+    }
+
+    @Test
+    void 分析予定の人は印があっても次の人へで選ばれる() {
+        submit("s1", "@a", "2026-10-01T09:00:00Z");
+        Application duplicate = submit("s2", "@a", "2026-10-01T10:00:00Z"); // 重複の印つき
+        // 配信者さんが印を確かめたうえで分析予定にした
+        service.update(duplicate.id(), ApplicationStatus.SCHEDULED, null, false, null);
+
+        assertThat(service.advanceStream(true)).map(StreamView::applicationId).contains(duplicate.id());
     }
 }
