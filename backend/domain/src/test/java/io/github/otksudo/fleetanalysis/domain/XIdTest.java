@@ -16,15 +16,15 @@ import org.junit.jupiter.params.provider.ValueSource;
 class XIdTest {
 
     @ParameterizedTest
-    @ValueSource(strings = {"@Teitoku_01", "teitoku_01", "  @TEITOKU_01 ", "＠teitoku_01"})
-    void 先頭の記号と大文字小文字の違いを吸収する(String raw) {
+    @ValueSource(strings = {"@Teitoku_01", "teitoku_01", "  @TEITOKU_01 ", "＠teitoku_01", "＠Ｔｅｉｔｏｋｕ＿０１"})
+    void 先頭の記号と大文字小文字と全角半角の違いを吸収する(String raw) {
         assertThat(XId.parse(raw)).isEqualTo(new XId("teitoku_01"));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"", "@", "teitoku-01", "this_id_is_too_long", "提督"})
     void 形式が正しくないIDは受け付けない(String raw) {
-        assertThatThrownBy(() -> XId.parse(raw)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> XId.parse(raw)).isInstanceOf(InvalidValueException.class);
     }
 
     @Test

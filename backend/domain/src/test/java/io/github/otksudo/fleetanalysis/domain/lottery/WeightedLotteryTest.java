@@ -1,7 +1,10 @@
 package io.github.otksudo.fleetanalysis.domain.lottery;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +22,20 @@ class WeightedLotteryTest {
     @Test
     void 同じ種なら同じ結果になる() {
         assertThat(WeightedLottery.draw(ENTRIES, 2, 42L)).isEqualTo(WeightedLottery.draw(ENTRIES, 2, 42L));
+    }
+
+    @Test
+    void 渡す順番が変わっても同じ種なら同じ結果になる() {
+        List<LotteryEntry> shuffled = new ArrayList<>(ENTRIES);
+        Collections.reverse(shuffled);
+        assertThat(WeightedLottery.draw(shuffled, 2, 42L)).isEqualTo(WeightedLottery.draw(ENTRIES, 2, 42L));
+    }
+
+    @Test
+    void 同じ応募IDが重複していたら抽選しない() {
+        List<LotteryEntry> duplicated = List.of(new LotteryEntry("a", 1.0), new LotteryEntry("a", 1.0));
+        assertThatThrownBy(() -> WeightedLottery.draw(duplicated, 1, 1L))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

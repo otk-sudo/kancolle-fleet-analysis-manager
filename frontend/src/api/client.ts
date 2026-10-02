@@ -10,6 +10,7 @@ import createClient from 'openapi-fetch'
 import type { paths } from './schema.gen'
 
 export const api = createClient<paths>({
-  // 接続先のURL。環境変数 VITE_API_BASE_URL があればそれを使う（.env ファイルで設定する）
+  // 接続先のURL。環境変数 VITE_API_BASE_URL があればそれを使う（.env ファイルで設定する）。
+  // ない場合は /api に送る。開発中は vite.config.ts の proxy 設定でバックエンドへ転送される
   baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api',
 })

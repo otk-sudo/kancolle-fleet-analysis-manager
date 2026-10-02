@@ -1,5 +1,6 @@
 package io.github.otksudo.fleetanalysis.domain;
 
+import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
@@ -27,7 +28,7 @@ public record XId(String value) {
     public XId {
         Objects.requireNonNull(value, "value");
         if (!VALID.matcher(value).matches()) {
-            throw new IllegalArgumentException("XのIDの形式が正しくありません: " + value);
+            throw new InvalidValueException("XのIDの形式が正しくありません: " + value);
         }
     }
 
@@ -36,13 +37,15 @@ public record XId(String value) {
      *
      * @param raw 入力された文字列（例: " @Teitoku_01 "）
      * @return 正規化したXId（例: teitoku_01）
-     * @throws IllegalArgumentException 形式が正しくない場合
+     * @throws InvalidValueException 形式が正しくない場合
      */
     public static XId parse(String raw) {
         Objects.requireNonNull(raw, "raw");
-        String trimmed = raw.strip(); // 前後の空白を除く
-        // 全角の＠で入力する人もいるため、両方を取り除く
-        if (trimmed.startsWith("@") || trimmed.startsWith("＠")) {
+        // NFKC正規化: 全角の英数字・記号を半角にそろえる（例: ＠Ｔｅｉｔｏｋｕ＿０１ → @Teitoku_01）。
+        // 日本語入力のまま打つ人がいるため
+        String normalized = Normalizer.normalize(raw, Normalizer.Form.NFKC);
+        String trimmed = normalized.strip(); // 前後の空白を除く
+        if (trimmed.startsWith("@")) {
             trimmed = trimmed.substring(1);
         }
         // Locale.ROOT: 実行環境の言語設定に左右されずに小文字化する（トルコ語などでの誤変換を防ぐ）

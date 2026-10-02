@@ -1,4 +1,4 @@
-package io.github.otksudo.fleetanalysis.app;
+package io.github.otksudo.fleetanalysis;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

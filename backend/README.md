@@ -14,7 +14,7 @@ Java（Spring Boot）で作るサーバー側のプログラムです。3つの�
 1. `domain/src/main/java/.../domain/lottery/WeightedLottery.java`: 抽選の仕組み。コメントで考え方を説明している
 2. `domain/src/test/java/.../domain/lottery/WeightedLotteryTest.java`: そのテスト。テストを読むと「何ができるか」がわかる
 3. `app/build.gradle.kts`: OpenAPI定義からコードを生成する設定
-4. `app/src/main/java/.../app/FleetAnalysisApplication.java`: アプリの起点
+4. `app/src/main/java/.../fleetanalysis/FleetAnalysisApplication.java`: アプリの起点
 
 ## よく使うコマンド（リポジトリの一番上で実行）
 ```sh

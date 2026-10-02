@@ -46,22 +46,30 @@ function onFormSubmit(e) {
     answers: answers,
   };
 
-  var result = UrlFetchApp.fetch(props.getProperty('API_URL'), {
-    method: 'post',
-    contentType: 'application/json',
-    headers: { 'X-Form-Key': props.getProperty('FORM_KEY') },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true,
-  });
+  // muteHttpExceptions: true にすると、APIがエラー（400や500など）を返しても例外にならず、結果を確認できる。
+  // ただし、通信できない・時間切れ・URL未設定などは例外になるため、try/catch でも受け止める。
+  // どちらの場合も「未連携」として記録し、応募が黙って失われないようにする。
+  try {
+    var result = UrlFetchApp.fetch(props.getProperty('API_URL'), {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'X-Form-Key': props.getProperty('FORM_KEY') },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
 
-  var code = result.getResponseCode();
-  if (code !== 201) {
-    console.error('応募の連携に失敗しました: ' + code + ' ' + result.getContentText());
-    markUnsynced_(response.getId(), code);
+    var code = result.getResponseCode();
+    if (code !== 201) {
+      console.error('応募の連携に失敗しました: ' + code + ' ' + result.getContentText());
+      markUnsynced_(response.getId(), String(code));
+    }
+  } catch (error) {
+    console.error('応募の連携に失敗しました（通信エラー）: ' + error);
+    markUnsynced_(response.getId(), String(error));
   }
 }
 
-function markUnsynced_(submissionId, statusCode) {
+function markUnsynced_(submissionId, reason) {
   // 回答シートの「連携状態」列への記録は段階1で実装する
-  console.warn('未連携: ' + submissionId + ' (' + statusCode + ')');
+  console.warn('未連携: ' + submissionId + ' (' + reason + ')');
 }

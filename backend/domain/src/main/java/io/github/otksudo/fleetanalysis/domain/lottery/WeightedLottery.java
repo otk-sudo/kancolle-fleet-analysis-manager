@@ -1,7 +1,10 @@
 package io.github.otksudo.fleetanalysis.domain.lottery;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.SplittableRandom;
 
 /**
@@ -11,8 +14,10 @@ import java.util.SplittableRandom;
  * 点が落ちた区間の人が当選する。重みが大きい人ほど区間が長いので当たりやすい。
  * 当選した人は棒から取り除き、当選人数に達するまで繰り返す（同じ人が二度当たらない「非復元抽出」）。
  *
- * <p>乱数の「種（seed）」が同じなら、何度実行しても同じ結果になる。
+ * <p>乱数の「種（seed）」と対象者が同じなら、何度実行しても同じ結果になる。
  * 抽選記録に種を残しておけば、後から結果を再現して公平性を確認できる（仕様 6.4）。
+ * 対象者を渡す順番が変わっても結果が変わらないよう、内部で応募ID順に並べ替えてから抽選する
+ * （データベースから読み直したときに、保存したときと同じ順で返ってくるとは限らないため）。
  */
 public final class WeightedLottery {
 
@@ -23,10 +28,11 @@ public final class WeightedLottery {
     /**
      * 抽選を行う。
      *
-     * @param entries 対象者。並び順も結果に影響するため、抽選記録と同じ順で渡す
+     * @param entries 対象者（順番は問わない）。同じ応募IDを2回含めてはいけない
      * @param winners 当選人数。対象者より多い場合は全員当選
      * @param seed    乱数の種
      * @return 当選者の応募ID（当選した順）
+     * @throws IllegalArgumentException 当選人数が負、または同じ応募IDが重複している場合
      */
     public static List<String> draw(List<LotteryEntry> entries, int winners, long seed) {
         if (winners < 0) {
@@ -35,7 +41,18 @@ public final class WeightedLottery {
         // java.util.Random は近い種どうしで最初の乱数が似通う性質があり、種を連番にすると偏る。
         // そのため、種をよく混ぜてから使う SplittableRandom を使う。
         SplittableRandom random = new SplittableRandom(seed);
-        List<LotteryEntry> remaining = new ArrayList<>(entries); // まだ当選していない人
+
+        // 同じ人が2回入っていると、二度当たって当選枠を余分に使ってしまうため、先に確かめる
+        Set<String> seen = new HashSet<>();
+        for (LotteryEntry entry : entries) {
+            if (!seen.add(entry.applicationId())) {
+                throw new IllegalArgumentException("duplicate applicationId: " + entry.applicationId());
+            }
+        }
+
+        // まだ当選していない人。渡された順番に左右されないよう、応募ID順に並べる
+        List<LotteryEntry> remaining = new ArrayList<>(entries);
+        remaining.sort(Comparator.comparing(LotteryEntry::applicationId));
         List<String> result = new ArrayList<>();
 
         while (result.size() < winners && !remaining.isEmpty()) {

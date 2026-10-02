@@ -1,4 +1,4 @@
-package io.github.otksudo.fleetanalysis.app;
+package io.github.otksudo.fleetanalysis;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -12,7 +12,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *   <li>依存ライブラリに応じて、Webサーバーなどの設定を自動で行う（オートコンフィグ）
  *   <li>このクラス自身を設定クラスとして扱う
  * </ul>
- * そのため、このクラスは他のクラスより上位のパッケージ（app）に置いている。
+ * 部品を探す範囲は「このクラスのパッケージとその下」。app・infra・domain のどのプロジェクトの部品も見つけられるよう、
+ * このクラスは一番上のパッケージ（io.github.otksudo.fleetanalysis）に置いている。
  */
 @SpringBootApplication
 public class FleetAnalysisApplication {

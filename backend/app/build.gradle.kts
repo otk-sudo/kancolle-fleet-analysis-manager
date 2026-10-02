@@ -18,6 +18,9 @@ openApiGenerate {
     generatorName.set("spring") // Spring用のコードを生成する
     inputSpec.set(rootProject.file("api/openapi.yaml").absolutePath)
     outputDir.set(generatedDir.get().asFile.absolutePath)
+    // 生成のたびに出力先を空にする。定義から消したAPIやデータのクラスが古いまま残り、
+    // 手元だけコンパイルが通ってしまうのを防ぐ
+    cleanupOutput.set(true)
     apiPackage.set("io.github.otksudo.fleetanalysis.app.api")
     modelPackage.set("io.github.otksudo.fleetanalysis.app.api.model")
     configOptions.set(mapOf(
@@ -53,9 +56,12 @@ dependencies {
     implementation(platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES))
     implementation(project(":backend:domain"))
     implementation(project(":backend:infra"))
-    implementation("org.springframework.boot:spring-boot-starter-web") // Web API を作るための一式
+    // Web API を作るための一式（Spring MVC と組み込みWebサーバー）。
+    // Spring Boot 4 で spring-boot-starter-web から名前が変わった
+    implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation") // 入力値チェック（@NotNull など）
 
     testImplementation("org.springframework.boot:spring-boot-starter-test") // Spring用のテスト一式
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test") // APIのテスト（MockMvc など）
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

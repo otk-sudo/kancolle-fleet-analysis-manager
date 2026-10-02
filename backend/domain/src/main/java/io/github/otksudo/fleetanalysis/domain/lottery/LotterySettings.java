@@ -13,8 +13,9 @@ public record LotterySettings(boolean enabled, boolean lossBonusEnabled, double 
     public static final LotterySettings DEFAULT = new LotterySettings(true, true, 1.0);
 
     public LotterySettings {
-        if (lossBonusStrength < 0) {
-            throw new IllegalArgumentException("lossBonusStrength must not be negative");
+        // 設定画面からおかしな値（負の数、NaN、無限大）が保存されないよう、作る時点で弾く
+        if (!Double.isFinite(lossBonusStrength) || lossBonusStrength < 0) {
+            throw new IllegalArgumentException("lossBonusStrength must be a finite number >= 0: " + lossBonusStrength);
         }
     }
 
