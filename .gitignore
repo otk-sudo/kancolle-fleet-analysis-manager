@@ -14,3 +14,4 @@ build/
 .env.*
 !.env.example
 backend.log
+backend.exited
