@@ -2,8 +2,10 @@
 
 艦隊分析への応募を管理するWebツール。Googleフォームで受け付けた応募を取り込み、進捗管理・重複チェック・抽選・配信用表示を行う。
 
+- **初めて読む人へ: [docs/guide/はじめに.md](docs/guide/はじめに.md)**（わからない言葉は [用語集](docs/guide/用語集.md)）
 - 仕様書: [docs/spec.md](docs/spec.md)
 - 設計メモと開発の段階: [docs/design.md](docs/design.md)
+- 開発ルール: [docs/development.md](docs/development.md)
 - API定義: [api/openapi.yaml](api/openapi.yaml)（バックエンドと画面の型はここから生成する）
 
 ## 構成

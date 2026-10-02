@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import org.junit.jupiter.api.Test;
 
+/** {@link LotterySettings} のテスト（当たりやすさの計算）。 */
 class LotterySettingsTest {
 
     @Test

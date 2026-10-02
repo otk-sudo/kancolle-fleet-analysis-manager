@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
+/** {@link WeightedLottery} のテスト。 */
 class WeightedLotteryTest {
 
     private static final List<LotteryEntry> ENTRIES = List.of(
@@ -38,11 +39,13 @@ class WeightedLotteryTest {
 
     @Test
     void 重みが大きい人ほど当たりやすい() {
+        // 種を変えて1万回抽選し、それぞれが1位になった回数を数える
         Map<String, Integer> firstPlace = new HashMap<>();
         for (long seed = 0; seed < 10_000; seed++) {
             firstPlace.merge(WeightedLottery.draw(ENTRIES, 1, seed).getFirst(), 1, Integer::sum);
         }
-        // c の重みは3/6なので、おおよそ半分で1位になる
+        // 重みの合計は6。cの重みは3なので約5,000回（3/6）、aは1なので約1,667回（1/6）1位になるはず。
+        // 乱数なのでぴったりにはならないため、幅を持たせて確認する
         assertThat(firstPlace.get("c")).isBetween(4_500, 5_500);
         assertThat(firstPlace.get("a")).isBetween(1_400, 1_950);
     }

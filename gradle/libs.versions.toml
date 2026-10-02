@@ -1,8 +1,12 @@
+# バージョンカタログ: 使うライブラリとバージョンを1か所にまとめるファイル。
+# 各プロジェクトの build.gradle.kts からは libs.junit.jupiter のような名前で参照する。
+# バージョンを上げるときはここだけ直せばよい。
+
 [versions]
-spring-boot = "4.1.1"
-openapi-generator = "7.25.0"
-junit = "5.13.4"
-assertj = "3.27.6"
+spring-boot = "4.1.1"         # Javaでアプリを作るためのフレームワーク
+openapi-generator = "7.25.0"  # OpenAPI定義からJavaのコードを自動生成するツール
+junit = "5.13.4"              # Javaのテストフレームワーク
+assertj = "3.27.6"            # テストの「期待値の確認」を読みやすく書くためのライブラリ
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }

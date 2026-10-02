@@ -7,6 +7,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+/**
+ * {@link XId} のテスト。
+ *
+ * <p>{@code @ParameterizedTest} と {@code @ValueSource} を使うと、同じテストを入力を変えて何度も実行できる。
+ * {@code assertThat(実際の値).isEqualTo(期待する値)} は AssertJ の書き方で、英文のように読める。
+ */
 class XIdTest {
 
     @ParameterizedTest
