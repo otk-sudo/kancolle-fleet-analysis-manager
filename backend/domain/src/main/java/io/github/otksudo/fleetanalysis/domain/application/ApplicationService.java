@@ -280,14 +280,19 @@ public class ApplicationService {
     }
 
     /**
-     * 配信用画面の「次の人へ」（仕様 7.2）。抽選を使わずに配信を進めるときに使う。
+     * 配信用画面の「次の人へ」（仕様 7.2）。
      *
-     * <p>いま配信用画面に出ている人（分析中）を「分析済み」にし、「次に分析する順」（5.4）の先頭の人を「分析中」にする。
-     * 重複・条件外の印がある人は、同じ人を2回分析しないよう飛ばす（印の内容は一覧で確かめてから手で進められる）。
+     * <p>いま配信用画面に出ている人（最後に分析中にした1人）を「分析済み」にし、「次に分析する順」（5.4）の先頭の人を「分析中」にする。
+     * <ul>
+     *   <li>「分析予定」の人は、配信者さんがすでに分析すると決めた人なので、印があってもそのまま選ぶ
+     *   <li>「未着手」の人は、重複・条件外の印があれば飛ばす（同じ人を2回分析しないため）
+     *   <li>抽選を使う設定のときは「未着手」の人を選ばない。未着手の人は抽選で選ぶため
+     * </ul>
      *
-     * @return 進めた後に配信用画面へ出す内容。待っている人がいなければ空
+     * @param includePending 「未着手」の人も選ぶか（抽選を使わない設定なら true）
+     * @return 進めた後に配信用画面へ出す内容。次の人がいなければ空
      */
-    public Optional<StreamView> advanceStream() {
+    public Optional<StreamView> advanceStream(boolean includePending) {
         synchronized (repository) {
             Instant now = clock.instant();
             Application current = currentOnStream();
@@ -295,16 +300,29 @@ public class ApplicationService {
                 current.changeStatus(ApplicationStatus.DONE, now);
                 repository.save(current);
             }
-            for (Application candidate : list(List.of(ApplicationStatus.SCHEDULED, ApplicationStatus.PENDING), null, null, "queue")) {
-                if (candidate.hasBlockingFlag()) {
-                    continue;
-                }
-                candidate.changeStatus(ApplicationStatus.ANALYZING, now);
-                repository.save(candidate);
-                break;
+            Application next = nextInQueue(includePending);
+            if (next != null) {
+                next.changeStatus(ApplicationStatus.ANALYZING, now);
+                repository.save(next);
             }
             return streamView();
         }
+    }
+
+    private Application nextInQueue(boolean includePending) {
+        List<Application> scheduled = list(List.of(ApplicationStatus.SCHEDULED), null, null, "queue");
+        if (!scheduled.isEmpty()) {
+            return scheduled.get(0);
+        }
+        if (!includePending) {
+            return null;
+        }
+        for (Application pending : list(List.of(ApplicationStatus.PENDING), null, null, "queue")) {
+            if (!pending.hasBlockingFlag()) {
+                return pending;
+            }
+        }
+        return null;
     }
 
     /**
