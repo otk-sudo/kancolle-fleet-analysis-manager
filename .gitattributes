@@ -1,0 +1,21 @@
+# 改行コードの決まり（Git がファイルを取り出すときに、ここに書いた改行コードにそろえる）
+#
+# Windows と Mac/Linux では改行の書き方が違う（Windows は CRLF、Mac/Linux は LF）。
+# Git for Windows は、何も指定がないと取り出すときに CRLF へ変えることがある。
+# すると bash 用のスクリプト（.sh や gradlew）が「\r: command not found」などで動かなくなるので、
+# どのPCで取り出しても、それぞれのファイルが動く改行コードになるように決めておく。
+
+# 基本: テキストファイルは Git の中では LF で保存し、取り出すときは各PCに合わせる
+* text=auto
+
+# bash で動かすスクリプトは、Windows でも必ず LF で取り出す
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows のコマンドプロンプトで動かすスクリプトは、必ず CRLF で取り出す
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 画像や jar はテキストではないので、改行の変換をしない
+*.jar binary
+*.png binary
