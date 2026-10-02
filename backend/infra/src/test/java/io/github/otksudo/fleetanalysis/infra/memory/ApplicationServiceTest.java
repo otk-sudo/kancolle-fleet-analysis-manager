@@ -17,6 +17,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -157,5 +158,29 @@ class ApplicationServiceTest {
         executor.shutdown();
 
         assertThat(repository.findAll()).hasSize(1);
+    }
+
+    @Test
+    void 次の人へ進むと分析中の人が分析済みになり次の順番の人が分析中になる() {
+        Application current = submit("s1", "@a", "2026-10-01T09:00:00Z");
+        Application pending = submit("s2", "@b", "2026-10-01T10:00:00Z");
+        Application scheduled = submit("s3", "@c", "2026-10-01T11:00:00Z");
+        submit("s4", "@b", "2026-10-01T12:00:00Z"); // 同じ人の2件目。重複の印がつくので飛ばされる
+        service.update(current.id(), ApplicationStatus.ANALYZING, null, false, null);
+        service.update(scheduled.id(), ApplicationStatus.SCHEDULED, null, false, null);
+
+        // 分析予定が未着手より先
+        Optional<StreamView> view = service.advanceStream();
+        assertThat(service.get(current.id()).status()).isEqualTo(ApplicationStatus.DONE);
+        assertThat(view).map(StreamView::applicationId).contains(scheduled.id());
+
+        // 次は未着手のうち、印のない人
+        view = service.advanceStream();
+        assertThat(view).map(StreamView::applicationId).contains(pending.id());
+
+        // 待っている人がいなければ（残りは重複の印つきだけ）、分析済みにして空になる
+        view = service.advanceStream();
+        assertThat(view).isEmpty();
+        assertThat(service.get(pending.id()).status()).isEqualTo(ApplicationStatus.DONE);
     }
 }

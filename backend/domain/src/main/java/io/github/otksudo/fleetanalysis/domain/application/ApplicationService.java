@@ -280,20 +280,39 @@ public class ApplicationService {
     }
 
     /**
+     * 配信用画面の「次の人へ」（仕様 7.2）。抽選を使わずに配信を進めるときに使う。
+     *
+     * <p>いま配信用画面に出ている人（分析中）を「分析済み」にし、「次に分析する順」（5.4）の先頭の人を「分析中」にする。
+     * 重複・条件外の印がある人は、同じ人を2回分析しないよう飛ばす（印の内容は一覧で確かめてから手で進められる）。
+     *
+     * @return 進めた後に配信用画面へ出す内容。待っている人がいなければ空
+     */
+    public Optional<StreamView> advanceStream() {
+        synchronized (repository) {
+            Instant now = clock.instant();
+            Application current = currentOnStream();
+            if (current != null) {
+                current.changeStatus(ApplicationStatus.DONE, now);
+                repository.save(current);
+            }
+            for (Application candidate : list(List.of(ApplicationStatus.SCHEDULED, ApplicationStatus.PENDING), null, null, "queue")) {
+                if (candidate.hasBlockingFlag()) {
+                    continue;
+                }
+                candidate.changeStatus(ApplicationStatus.ANALYZING, now);
+                repository.save(candidate);
+                break;
+            }
+            return streamView();
+        }
+    }
+
+    /**
      * 配信用画面の内容（仕様 7.2）。「分析中」の人がいなければ空。
      * 分析中が複数いる場合は、最後に分析中にした人を出す。
      */
     public Optional<StreamView> streamView() {
-        Application current = null;
-        for (Application application : repository.findAll()) {
-            if (application.status() != ApplicationStatus.ANALYZING) {
-                continue;
-            }
-            // updatedAt（メモの変更でも変わる）ではなく、ステータスを変えた日時で選ぶ
-            if (current == null || application.statusChangedAt().isAfter(current.statusChangedAt())) {
-                current = application;
-            }
-        }
+        Application current = currentOnStream();
         if (current == null) {
             return Optional.empty();
         }
@@ -309,6 +328,21 @@ public class ApplicationService {
         String displayName = current.anonymous() ? ANONYMOUS_DISPLAY_NAME : current.admiralName();
         return Optional.of(new StreamView(
                 current.id(), displayName, current.simulatorUrl(), streamSafeAnswers(current), previous));
+    }
+
+    /** 配信用画面に出す人: 「分析中」の中で、最後にステータスを変えた人。いなければ null */
+    private Application currentOnStream() {
+        Application current = null;
+        for (Application application : repository.findAll()) {
+            if (application.status() != ApplicationStatus.ANALYZING) {
+                continue;
+            }
+            // updatedAt（メモの変更でも変わる）ではなく、ステータスを変えた日時で選ぶ
+            if (current == null || application.statusChangedAt().isAfter(current.statusChangedAt())) {
+                current = application;
+            }
+        }
+        return current;
     }
 
     /**

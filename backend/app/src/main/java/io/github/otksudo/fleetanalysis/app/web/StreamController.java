@@ -22,4 +22,11 @@ public class StreamController implements StreamApi {
         StreamView view = new StreamView(applicationService.streamView().map(ApiMapper::toApi).orElse(null));
         return ResponseEntity.ok(view);
     }
+
+    @Override
+    public ResponseEntity<StreamView> advanceStream() {
+        // TODO(段階3): ログインができたら、配信者・運営だけが実行できるように権限を確認する
+        StreamView view = new StreamView(applicationService.advanceStream().map(ApiMapper::toApi).orElse(null));
+        return ResponseEntity.ok(view);
+    }
 }
