@@ -24,6 +24,14 @@
 - Java 21
 - Node.js 22
 
+## 試作版を動かす
+
+```sh
+./scripts/dev.sh   # サンプルデータ入りで起動し、http://localhost:5173 を開く
+```
+
+GitHub Codespaces でも動きます（`.devcontainer/` に設定あり）。手順は [はじめに](docs/guide/はじめに.md) の5章。
+
 ## よく使うコマンド
 
 ```sh

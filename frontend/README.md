@@ -10,12 +10,21 @@
 | Vite | 開発用サーバーと本番用ビルドのツール。保存するとすぐ画面に反映される |
 | openapi-typescript | `api/openapi.yaml` からAPIの型を自動生成する |
 | openapi-fetch | 生成した型を使って、型チェック付きでAPIを呼び出す |
+| React Router | URLに応じてページを切り替える |
 | oxlint | よくある書き間違いを見つけるツール（リンター） |
 
 ## 最初に読むファイル
 1. `src/main.tsx`: 画面の起点
-2. `src/App.tsx`: 画面全体の一番外側のコンポーネント
+2. `src/App.tsx`: URLとページの対応（ルーティング）
 3. `src/api/client.ts`: APIの呼び出し方
+4. `src/pages/ApplicationListPage.tsx`: 一覧ページ。APIから読み込んで表に出す、という基本の形
+5. `src/labels.ts`: 画面に出す日本語の表示名
+
+| フォルダ | 中身 |
+|---|---|
+| `src/pages/` | ページ（一覧、詳細、抽選、配信用画面）。1ファイル1ページ |
+| `src/components/` | いくつかのページで使う部品（ステータスのラベル、回答の表など） |
+| `src/api/` | APIの呼び出しと型 |
 
 ## よく使うコマンド（このディレクトリで実行）
 ```sh
