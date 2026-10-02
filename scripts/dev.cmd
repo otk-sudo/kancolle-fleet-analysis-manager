@@ -88,9 +88,10 @@ rem Show the last 30 lines of backend.log so the cause is visible here.
 echo ---------------- last lines of backend.log ----------------
 if exist backend.log powershell -NoProfile -Command "Get-Content -Path backend.log -Tail 30"
 echo -----------------------------------------------------------
-echo Full log: %CD%\backend.log
+echo Full log: "%CD%\backend.log"
 
 :error
+cd /d "%~dp0.."
 call gradlew.bat --stop >nul 2>nul
 pause
 exit /b 1

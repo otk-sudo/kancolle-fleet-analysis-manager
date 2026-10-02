@@ -32,9 +32,17 @@ jobs:
       - uses: actions/checkout@v4
       # Windows 用の .cmd に英数字以外（日本語など）が入っていないか確かめる。
       # cmd.exe は日本語の Windows では UTF-8 を正しく読めず、スクリプトが壊れるため（scripts/README.md）
+      # grep の終了コード: 0 = 見つかった（日本語あり）、1 = 見つからない（OK）、2 = ファイルがないなどのエラー
       - run: |
-          if LC_ALL=C grep -nP '[^\x00-\x7F]' scripts/*.cmd; then
+          set +e
+          LC_ALL=C grep -nP '[^\x00-\x7F]' scripts/*.cmd
+          rc=$?
+          if [ $rc -eq 0 ]; then
             echo "scripts/*.cmd に英数字以外の文字があります（上の行）。英数字と記号だけで書いてください"
+            exit 1
+          fi
+          if [ $rc -ne 1 ]; then
+            echo "scripts/*.cmd を確かめられませんでした（ファイルがない、など）"
             exit 1
           fi
 
