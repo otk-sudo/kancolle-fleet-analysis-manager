@@ -3,6 +3,8 @@ package io.github.otksudo.fleetanalysis.domain.application;
 import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.NotFoundException;
 import io.github.otksudo.fleetanalysis.domain.XId;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -48,7 +50,7 @@ public class ApplicationService {
         Map<String, Object> answers = command.answers();
         XId xId = XId.parse(requiredText(answers, AnswerKeys.X_ID));
         String admiralName = requiredText(answers, AnswerKeys.ADMIRAL_NAME);
-        String simulatorUrl = requiredText(answers, AnswerKeys.SIMULATOR_URL);
+        String simulatorUrl = requiredUrl(answers, AnswerKeys.SIMULATOR_URL);
         boolean anonymous = AnswerKeys.ANONYMOUS_ANSWER.equals(answers.get(AnswerKeys.NAME_DISPLAY));
 
         // 保存する回答では、XのIDを正規化した値に置き換えておく
@@ -267,6 +269,20 @@ public class ApplicationService {
         answers.remove(AnswerKeys.NAME_DISPLAY);
         answers.remove(AnswerKeys.ADMIRAL_NAME); // 匿名希望のときに名前が漏れないよう、名前は displayName だけで出す
         return answers;
+    }
+
+    /** URLとして正しい形か（http/https で始まり、空白などを含まない）を確かめる。画面でリンクとして開くため */
+    private static String requiredUrl(Map<String, Object> answers, String key) {
+        String text = requiredText(answers, key);
+        try {
+            URI uri = new URI(text);
+            if ("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) {
+                return text;
+            }
+        } catch (URISyntaxException e) {
+            // 下の例外にまとめる
+        }
+        throw new InvalidValueException("URLの形式が正しくありません: " + key);
     }
 
     private static String requiredText(Map<String, Object> answers, String key) {

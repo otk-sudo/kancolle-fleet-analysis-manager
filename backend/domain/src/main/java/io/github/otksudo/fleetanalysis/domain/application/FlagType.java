@@ -1,5 +1,7 @@
 package io.github.otksudo.fleetanalysis.domain.application;
 
+import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
+
 /** 応募につける印の種類（仕様 5.2、5.3）。 */
 public enum FlagType {
     /** 同じXのIDで、まだ終わっていない応募がすでにある */
@@ -17,5 +19,15 @@ public enum FlagType {
 
     public String code() {
         return code;
+    }
+
+    /** APIのコード（例: "duplicate"）から探す。 */
+    public static FlagType fromCode(String code) {
+        for (FlagType value : values()) {
+            if (value.code.equals(code)) {
+                return value;
+            }
+        }
+        throw new InvalidValueException("印の種類のコードが正しくありません: " + code);
     }
 }

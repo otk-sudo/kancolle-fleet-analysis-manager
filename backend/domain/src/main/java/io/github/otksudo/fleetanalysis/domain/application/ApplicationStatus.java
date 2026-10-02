@@ -1,6 +1,6 @@
 package io.github.otksudo.fleetanalysis.domain.application;
 
-import io.github.otksudo.fleetanalysis.domain.NotFoundException;
+import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import java.util.Set;
 
 /**
@@ -66,6 +66,6 @@ public enum ApplicationStatus {
                 return status;
             }
         }
-        throw new NotFoundException("ステータスが見つかりません: " + code);
+        throw new InvalidValueException("ステータスのコードが正しくありません: " + code);
     }
 }
