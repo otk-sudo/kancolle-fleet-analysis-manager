@@ -25,6 +25,19 @@ jobs:
       # OpenAPI定義の書き方の誤りをチェックする
       - run: npx --yes @redocly/cli@2 lint api/openapi.yaml
 
+  scripts:
+    name: 起動スクリプトのチェック
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Windows 用の .cmd に英数字以外（日本語など）が入っていないか確かめる。
+      # cmd.exe は日本語の Windows では UTF-8 を正しく読めず、スクリプトが壊れるため（scripts/README.md）
+      - run: |
+          if LC_ALL=C grep -nP '[^\x00-\x7F]' scripts/*.cmd; then
+            echo "scripts/*.cmd に英数字以外の文字があります（上の行）。英数字と記号だけで書いてください"
+            exit 1
+          fi
+
   backend:
     name: バックエンドのビルドとテスト
     runs-on: ubuntu-latest
