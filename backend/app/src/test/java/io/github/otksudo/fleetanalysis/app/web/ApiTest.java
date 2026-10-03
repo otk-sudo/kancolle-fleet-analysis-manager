@@ -9,12 +9,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
+import io.github.otksudo.fleetanalysis.app.security.DevLogin;
+import io.github.otksudo.fleetanalysis.app.security.DevUsers;
 import java.net.URI;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
+import org.springframework.context.annotation.Bean;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
@@ -28,11 +33,28 @@ import org.springframework.test.web.servlet.MockMvc;
  *
  * <p>{@code @DirtiesContext} は「テストごとにアプリを作り直す」指定。保存先がメモリなので、
  * 前のテストで登録した応募が次のテストに残らないようにしている。
+ *
+ * <p>このテストでは、すべてのリクエストに「配信者の試しユーザー」のトークンを付けて送る（{@link AsStreamer}）。
+ * ログインや権限そのものの確認は {@code AuthApiTest} で行う。
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class ApiTest {
+
+    /**
+     * テストのときだけ足す部品。MockMvc で送るすべてのリクエストに、配信者のトークンを付ける。
+     * {@code defaultRequest} に書いたヘッダーは、各テストのリクエストに自動で足される。
+     */
+    @TestConfiguration
+    static class AsStreamer {
+
+        @Bean
+        MockMvcBuilderCustomizer streamerToken(DevLogin devLogin, DevUsers devUsers) {
+            String token = devLogin.issue(devUsers.user("dev-streamer").orElseThrow());
+            return builder -> builder.defaultRequest(get("/").header("Authorization", "Bearer " + token));
+        }
+    }
 
     @Autowired
     private MockMvc mockMvc;
@@ -81,13 +103,15 @@ class ApiTest {
     }
 
     @ParameterizedTest
-    // URLの書き方を変えても秘密キーの確認をすり抜けられないこと（%69 は i を別の書き方にしたもの、;a=b は付け足し）
+    // URLの書き方を変えても秘密キーの確認をすり抜けられないこと（%69 は i を別の書き方にしたもの、;a=b は付け足し）。
+    // ;a=b を含むURLは、秘密キーの確認より前に Spring Security が「怪しいURL」として400で断る。
+    // どちらで断られても受付されなければよいので、「400番台（送った側の誤り）」であることと、応募が増えていないことを確かめる
     @ValueSource(strings = {"/%69ntake/applications", "/intake;a=b/applications", "/intake/applications;a=b"})
     void URLの書き方を変えても秘密キーの確認はすり抜けられない(String path) throws Exception {
         mockMvc.perform(post(URI.create(path))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(intakeJson("s1", "@test_user")))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().is4xxClientError());
         mockMvc.perform(get("/applications")).andExpect(jsonPath("$.items", hasSize(0)));
     }
 

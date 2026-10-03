@@ -7,6 +7,8 @@ import io.github.otksudo.fleetanalysis.app.api.model.ImportCsv200Response;
 import io.github.otksudo.fleetanalysis.app.api.model.User;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import io.github.otksudo.fleetanalysis.app.security.CurrentUsers;
+import io.github.otksudo.fleetanalysis.domain.auth.Permission;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -18,25 +20,36 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class NotYetImplementedController implements UsersApi, ImportsApi {
 
-    // TODO(段階3): Cognitoと連携してユーザー管理を作る
+    private final CurrentUsers users;
+
+    public NotYetImplementedController(CurrentUsers users) {
+        this.users = users;
+    }
+
+    // TODO(段階7): Cognito と連携してユーザー管理を作る（docs/design.md 5章の段階7）。
+    // 権限の確認は先に入れておき、権限のない人には「未実装」より先に403を返す
     @Override
     public ResponseEntity<List<User>> listUsers() {
-        throw new NotImplementedYetException("ユーザー管理は段階3で作ります");
+        users.require(Permission.MANAGE_USERS);
+        throw new NotImplementedYetException("ユーザー管理は段階7で作ります");
     }
 
     @Override
     public ResponseEntity<User> createUser(CreateUserRequest createUserRequest) {
-        throw new NotImplementedYetException("ユーザー管理は段階3で作ります");
+        users.require(Permission.MANAGE_USERS);
+        throw new NotImplementedYetException("ユーザー管理は段階7で作ります");
     }
 
     @Override
     public ResponseEntity<Void> deleteUser(String userId) {
-        throw new NotImplementedYetException("ユーザー管理は段階3で作ります");
+        users.require(Permission.MANAGE_USERS);
+        throw new NotImplementedYetException("ユーザー管理は段階7で作ります");
     }
 
     // TODO(段階7): 旧スプレッドシートのCSV取り込みを作る
     @Override
     public ResponseEntity<ImportCsv200Response> importCsv(String file, String mapping, String formVersion) {
+        users.require(Permission.IMPORT_CSV);
         throw new NotImplementedYetException("CSV取り込みは段階7で作ります");
     }
 }

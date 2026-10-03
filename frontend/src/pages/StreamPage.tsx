@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { errorMessage, type StreamApplicant } from '../api/types'
+import { useAuth } from '../auth/useAuth'
 import AnswerTable from '../components/AnswerTable'
 
 /** 配信用画面を自動で読み直す間隔（ミリ秒）。管理画面で「分析中」にした人が、数秒で切り替わる */
@@ -27,6 +28,8 @@ function StreamPage() {
   // 抽選を使う設定か。使わないときは「配信中の抽選」ボタンを出さない
   const [lotteryEnabled, setLotteryEnabled] = useState(false)
   const [error, setError] = useState('')
+  // 配信の操作（次の人へ・配信中の抽選）をしてよい人か。配信者・運営と、配信者が許可した関係者（仕様 2章）
+  const canOperate = useAuth().can('streamOperation')
 
   const load = useCallback(async () => {
     requestSeq.current += 1
@@ -114,10 +117,12 @@ function StreamPage() {
       {error && <p className="error">{error}</p>}
       {/* 配信者さんが操作するボタン。配信ソフトで映す範囲から外せるよう、画面の下に置いている */}
       <div className="stream-controls">
-        <button type="button" className="button primary" onClick={() => void advance()} disabled={drawing || busy}>
-          次の人へ
-        </button>
-        {lotteryEnabled && (
+        {canOperate && (
+          <button type="button" className="button primary" onClick={() => void advance()} disabled={drawing || busy}>
+            次の人へ
+          </button>
+        )}
+        {canOperate && lotteryEnabled && (
           <button type="button" className="button" onClick={() => void drawLive()} disabled={drawing}>
             配信中の抽選（1人）
           </button>

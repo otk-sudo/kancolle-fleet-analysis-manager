@@ -5,6 +5,11 @@ app:
   # フォーム（Apps Script）だけが知っている秘密キー。本番では必ず環境変数 FORM_KEY で別の値を渡す。
   # 既定値は手元での試作用で、知られても困らない値にしている
   form-key: ${FORM_KEY:dev-form-key}
+  # ログインの方式。cognito = 本番の Cognito（段階4で作る）、dev = 手元で使う仮ログイン（役割を選ぶだけ）。
+  # 何も設定しないときは cognito にする。うっかり仮ログイン（誰でも運営になれる）で本番が動かないようにするため。
+  # 手元で動かすときは demo か local のプロファイル（application-demo.yml / application-local.yml）で dev にしている
+  auth:
+    mode: ${AUTH_MODE:cognito}
   # 保存先。memory = メモリ（止めると消える。試作・テスト用）、dynamodb = DynamoDB（本番と、手元の DynamoDB Local）
   storage: ${APP_STORAGE:memory}
   # DynamoDB の設定（storage が dynamodb のときだけ使う）

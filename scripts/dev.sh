@@ -51,9 +51,10 @@ echo "バックエンドを起動しています（初回は依存ライブラ�
 BACKEND_PID=$!
 
 # バックエンドが応答するまで、1秒ごとに確かめる（最大5分）
+# 問い合わせ先はログインしなくても呼べる /dev/users（試しユーザーの一覧）にする。ほかのAPIはログインが必要で、401が返るため
 started=false
 for _ in $(seq 1 300); do
-  if curl -fs http://localhost:8080/applications > /dev/null; then
+  if curl -fs http://localhost:8080/dev/users > /dev/null; then
     echo "バックエンドが起動しました。ログは backend.log にあります"
     started=true
     break

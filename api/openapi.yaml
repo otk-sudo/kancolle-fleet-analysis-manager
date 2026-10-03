@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 艦隊分析 応募者管理API
-  version: 0.2.0
+  version: 0.3.0
   description: 艦隊分析への応募を管理するAPI。仕様は docs/spec.md を参照。
 servers:
   - url: https://api.example.com
@@ -17,7 +17,66 @@ tags:
   - name: settings
   - name: users
   - name: imports
+  - name: me
+  - name: devLogin
+    description: 手元で動かすときだけ使う仮ログイン（本番では使えない）
 paths:
+  /me:
+    get:
+      tags: [me]
+      operationId: getMe
+      summary: ログインしている人と、その人ができること
+      responses:
+        '200':
+          description: ログインしている人
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Me'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /dev/users:
+    get:
+      tags: [devLogin]
+      operationId: listDevUsers
+      summary: 仮ログインで選べるユーザー（手元で動かすときだけ）
+      security: []
+      responses:
+        '200':
+          description: 選べるユーザー
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DevUser'
+  /dev/login:
+    post:
+      tags: [devLogin]
+      operationId: devLogin
+      summary: 仮ログイン（手元で動かすときだけ）
+      description: |
+        選んだユーザーとしてログインしたことにして、トークン（JWT）を返す。
+        本番の Cognito のトークンと同じ形（役割は cognito:groups に入れる）にしているので、
+        サーバーの権限の確認は本番と同じ処理を通る。手元用の設定（app.auth.mode が dev）のときだけ使える。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DevLoginRequest'
+      responses:
+        '200':
+          description: ログインできた
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevLoginResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /intake/applications:
     post:
       tags: [intake]
@@ -93,6 +152,8 @@ paths:
                 $ref: '#/components/schemas/ApplicationPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /applications/{applicationId}:
     parameters:
       - $ref: '#/components/parameters/ApplicationId'
@@ -107,6 +168,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
@@ -131,6 +196,8 @@ paths:
                 $ref: '#/components/schemas/Application'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -153,6 +220,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoryEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
   /applications/{applicationId}/keep:
@@ -180,6 +251,8 @@ paths:
                 $ref: '#/components/schemas/Application'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -209,6 +282,8 @@ paths:
                 $ref: '#/components/schemas/BulkStatusResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -236,6 +311,8 @@ paths:
       responses:
         '204':
           description: 並べ替え完了
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /applicants/{xId}/applications:
@@ -254,6 +331,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Application'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /applicants/{xId}:
     parameters:
       - $ref: '#/components/parameters/XId'
@@ -264,6 +345,8 @@ paths:
       responses:
         '204':
           description: 削除完了
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /stream/current:
@@ -278,6 +361,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /stream/next:
     post:
       tags: [stream]
@@ -295,6 +382,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /stream/operators:
+    get:
+      tags: [stream]
+      operationId: listStreamOperators
+      summary: 関係者ごとの、配信の操作の許可（配信者・運営）
+      responses:
+        '200':
+          description: 関係者の一覧と、それぞれ許可しているか
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StreamOperator'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /stream/operators/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [stream]
+      operationId: grantStreamOperator
+      summary: 関係者に配信の操作を許可する（配信者・運営）
+      responses:
+        '204':
+          description: 許可した
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [stream]
+      operationId: revokeStreamOperator
+      summary: 関係者への配信の操作の許可を取り消す（配信者・運営）
+      responses:
+        '204':
+          description: 取り消した
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /lotteries:
@@ -320,6 +460,10 @@ paths:
                   nextCursor:
                     type: [string, 'null']
                 required: [items, nextCursor]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [lotteries]
       operationId: runLottery
@@ -337,6 +481,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Lottery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
@@ -364,6 +510,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [settings]
       operationId: putSettings
@@ -381,6 +531,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
@@ -399,6 +551,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [users]
       operationId: createUser
@@ -426,6 +582,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /users/{userId}:
@@ -442,6 +600,8 @@ paths:
       responses:
         '204':
           description: 削除完了
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /imports/csv:
@@ -487,13 +647,17 @@ paths:
                         message:
                           type: string
                 required: [imported, skipped, errors]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     cognito:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: CognitoのIDトークン。グループ（admin/streamer/staff）で権限を判定
+      description: CognitoのIDトークン（手元では /dev/login の仮のトークン）。グループ（admin/streamer/staff）で権限を判定
     formKey:
       type: apiKey
       in: header
@@ -535,13 +699,13 @@ components:
           schema:
             $ref: '#/components/schemas/ApiError'
     Unauthorized:
-      description: 認証が必要
+      description: 認証が必要（トークンがない・期限切れ・正しくない）
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
     Forbidden:
-      description: 権限がない
+      description: 権限がない（二段階認証をまだ設定していない配信者・運営は、どの操作もこれになる）
       content:
         application/json:
           schema:
@@ -576,6 +740,70 @@ components:
     Role:
       type: string
       enum: [admin, streamer, staff]
+    Permission:
+      type: string
+      description: |
+        できること。view=応募の閲覧、editApplications=応募の変更（ステータス・並べ替え・メモなど）、
+        streamOperation=配信の操作（次の人へ・配信中の抽選など）、bulkLottery=まとめ抽選、
+        editSettings=設定の変更、manageStreamOperators=関係者への配信の操作の許可、
+        manageUsers=ユーザー管理、deleteApplicant=削除依頼への対応、importCsv=CSV取り込み
+      enum: [view, editApplications, streamOperation, bulkLottery, editSettings, manageStreamOperators, manageUsers, deleteApplicant, importCsv]
+    Me:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        mfaRequired:
+          type: boolean
+          description: 二段階認証（MFA）を設定するまで管理機能を使えない状態か（配信者・運営で、まだ設定していない）
+        streamOperator:
+          type: boolean
+          description: 関係者で、配信の操作を許可されているか
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+      required: [id, displayName, role, mfaRequired, streamOperator, permissions]
+    StreamOperator:
+      type: object
+      properties:
+        userId:
+          type: string
+        displayName:
+          type: string
+        allowed:
+          type: boolean
+      required: [userId, displayName, allowed]
+    DevUser:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        mfaConfigured:
+          type: boolean
+          description: 二段階認証を設定済みとして扱うか（設定していない人の画面を試すため）
+      required: [id, displayName, role, mfaConfigured]
+    DevLoginRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+      required: [userId]
+    DevLoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: APIを呼ぶときに Authorization ヘッダーで「Bearer トークン」として送る
+      required: [token]
     Answers:
       type: object
       description: フォーム回答。キーは設定の項目コード。版ごとに項目が変わるため自由形式

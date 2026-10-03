@@ -2,7 +2,14 @@
 // APIではステータスや項目を英語のコード（例: "pending"）でやりとりし、画面に出すときだけ日本語に直す。
 // TODO(段階7): ステータスや項目は設定データから読み込む（仕様 10章）。試作では固定の表にしている
 
-import type { Application, FlagType, SkipReason } from './api/types'
+import type { Application, FlagType, Role, SkipReason } from './api/types'
+
+/** 役割のコード → 表示名（仕様 3章） */
+export const ROLE_LABELS: Record<Role, string> = {
+  admin: '運営',
+  streamer: '配信者',
+  staff: '関係者',
+}
 
 /** ステータスのコード → 表示名 */
 export const STATUS_LABELS: Record<string, string> = {

@@ -130,6 +130,10 @@ a:hover {
   flex-direction: column;
   gap: 20px;
 }
+/* ログイン画面など、中身が少ない画面は幅を狭くして読みやすくする */
+.narrow-page {
+  max-width: 640px;
+}
 /* 画面名。見出しの書体は画面名と提督名だけに使う */
 .page-title {
   margin: 0;
@@ -920,10 +924,24 @@ input.number-input {
   text-decoration: none;
   color: var(--color-text-label);
 }
-.settings-menu a[aria-current='true'] {
+.settings-menu a:hover {
   background: var(--color-navy-soft);
   color: var(--color-navy);
-  font-weight: 700;
+}
+/* 入力欄をまとめる枠（fieldset）の、ブラウザが付ける線と余白を消す。中はカードと同じ間隔で縦に並べる */
+.plain-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+/* 変えられない設定は、押せないことがわかるように少し薄くする */
+.plain-fieldset:disabled .check-option {
+  cursor: default;
+  opacity: 0.7;
 }
 .settings-body {
   flex: 999 1 560px;
@@ -1018,4 +1036,26 @@ input.number-input {
   .stream-drawing {
     animation: none;
   }
+}
+
+/* ───────── ログイン画面（手元で試すための仮ログイン） ───────── */
+
+.login-users {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 試しユーザー1人分のボタン。名前・役割・補足を横に並べ、幅いっぱいに広げる */
+.button.login-user {
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  text-align: left;
+}
+.button.login-user .tag {
+  margin-left: 0;
 }

@@ -2,11 +2,13 @@ package io.github.otksudo.fleetanalysis.app.config;
 
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
+import io.github.otksudo.fleetanalysis.domain.auth.StreamOperatorRepository;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRepository;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryService;
 import io.github.otksudo.fleetanalysis.infra.dynamodb.DynamoDbStorage;
 import io.github.otksudo.fleetanalysis.infra.memory.InMemoryApplicationRepository;
 import io.github.otksudo.fleetanalysis.infra.memory.InMemoryLotteryRepository;
+import io.github.otksudo.fleetanalysis.infra.memory.InMemoryStreamOperatorRepository;
 import java.time.Clock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -50,6 +52,11 @@ public class ServiceConfig {
         LotteryRepository lotteryRepository() {
             return new InMemoryLotteryRepository();
         }
+
+        @Bean
+        StreamOperatorRepository streamOperatorRepository() {
+            return new InMemoryStreamOperatorRepository();
+        }
     }
 
     /**
@@ -78,6 +85,11 @@ public class ServiceConfig {
         @Bean
         LotteryRepository lotteryRepository(DynamoDbStorage storage) {
             return storage.lotteries();
+        }
+
+        @Bean
+        StreamOperatorRepository streamOperatorRepository(DynamoDbStorage storage) {
+            return storage.streamOperators();
         }
     }
 
