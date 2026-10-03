@@ -219,8 +219,9 @@ class DynamoDbApplicationRepositoryTest {
         repository.save(application);
 
         List<HistoryEntry> history = repository.findHistory("a1");
+        // 同じ時刻の2件（ステータス → XのID）も、変えた順に並ぶ
         assertThat(history).extracting(HistoryEntry::kind)
-                .containsExactlyInAnyOrder(HistoryEntry.Kind.STATUS, HistoryEntry.Kind.X_ID, HistoryEntry.Kind.STATUS);
+                .containsExactly(HistoryEntry.Kind.STATUS, HistoryEntry.Kind.X_ID, HistoryEntry.Kind.STATUS);
         assertThat(history.get(2)).satisfies(entry -> {
             assertThat(entry.from()).isEqualTo("analyzing");
             assertThat(entry.to()).isEqualTo("done");

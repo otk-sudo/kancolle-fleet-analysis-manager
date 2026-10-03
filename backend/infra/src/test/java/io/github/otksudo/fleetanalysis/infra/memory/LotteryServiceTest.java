@@ -67,6 +67,53 @@ class LotteryServiceTest {
     }
 
     @Test
+    void 抽選の途中でほかの人が先に変えた応募も読み直して結果を当てはめ記録は残る() {
+        Application a = submit("s1", "a", "2026-10-01T10:00:00Z");
+        Application b = submit("s2", "b", "2026-10-01T10:01:00Z");
+        // b の保存だけ、1回目は「ほかの人が先に変更した」ことにする保存先
+        InMemoryApplicationRepository flaky = new InMemoryApplicationRepository() {
+            private boolean failed;
+
+            @Override
+            public synchronized void saveAll(List<Application> list) {
+                if (!failed && list.stream().anyMatch(app -> app.id().equals(b.id()))) {
+                    failed = true;
+                    // 実際に誰かがメモを保存して版が進んだ状態を作ってから断る
+                    Application other = applications.findById(b.id()).orElseThrow();
+                    other.changeMemo("抽選中に保存", clock.instant());
+                    applications.save(other);
+                    throw new ConflictException("ほかの人が先に変更しました");
+                }
+                applications.saveAll(list);
+            }
+
+            @Override
+            public synchronized List<Application> findAll() {
+                return applications.findAll();
+            }
+
+            @Override
+            public synchronized java.util.Optional<Application> findById(String id) {
+                return applications.findById(id);
+            }
+
+            @Override
+            public synchronized List<Application> findByXId(io.github.otksudo.fleetanalysis.domain.XId xId) {
+                return applications.findByXId(xId);
+            }
+        };
+        LotteryService service = new LotteryService(flaky, lotteries, clock);
+
+        service.run(LotteryMode.BULK, 1, Set.of(), "tester");
+
+        assertThat(lotteries.findAll()).hasSize(1);
+        Application reloadedB = applicationService.get(b.id());
+        assertThat(reloadedB.status()).isIn(ApplicationStatus.SCHEDULED, ApplicationStatus.LOST);
+        assertThat(reloadedB.memo()).isEqualTo("抽選中に保存"); // ほかの人の変更は消えていない
+        assertThat(applicationService.get(a.id()).status()).isIn(ApplicationStatus.SCHEDULED, ApplicationStatus.LOST);
+    }
+
+    @Test
     void まとめ抽選では当選者が分析予定に外れた人が落選になる() {
         submit("s1", "a", "2026-10-01T10:00:00Z");
         submit("s2", "b", "2026-10-01T10:01:00Z");

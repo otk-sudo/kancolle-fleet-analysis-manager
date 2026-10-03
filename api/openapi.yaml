@@ -193,7 +193,7 @@ paths:
       summary: 複数の応募のステータスをまとめて変える（仕様 5.6）
       description: |
         全部変えられるときだけ変える（1件でも変えられなければ、どれも変えずに 409）。
-        1回に変えられるのは25件まで。
+        1回に変えられるのは25件まで。変えられるステータスは pending・scheduled・skipped だけ（それ以外は 400）。
       requestBody:
         required: true
         content:

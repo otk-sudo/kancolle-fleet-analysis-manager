@@ -110,15 +110,71 @@ public class LotteryService {
         }
         // 抽選でステータスが変わった人の、ほかの応募の印を付け直す（例: 落選した応募の後に送られた応募は「重複」から「再応募」へ）
         ApplicationService.refreshFlags(applications, affected, changed);
-        for (Application application : changed.values()) {
-            applications.save(application);
-        }
-        // TODO(段階6): 抽選の対象者は数百人になることがあり、1回のトランザクション（最大100件）に収まらないため、
-        // 今は1件ずつ保存している。途中で失敗したときに記録と食い違わないよう、抽選の取り消しと合わせて見直す
 
+        // 抽選記録を先に保存する。応募の保存が途中で失敗しても、記録があれば抽選の取り消し（段階6）で元に戻せるため。
+        // 逆の順番だと、「落選」になったのに記録がない（取り消せない）応募が残ってしまう
         LotteryRecord record = new LotteryRecord(UUID.randomUUID().toString(), mode, now, executedBy, seed, recordEntries);
         lotteries.save(record);
+
+        // 抽選の対象者は数百人になることがあり、1回のトランザクション（最大100件）に収まらないため、1件ずつ保存する。
+        // TODO(段階6): 抽選の取り消しを作るときに、全部を確実にそろえる方法（再実行など）を見直す
+        Set<String> candidateIds = candidateIds(candidates);
+        for (Application application : changed.values()) {
+            saveRetryingOnConflict(application, candidateIds.contains(application.id()) ? winnerIds : null,
+                    mode, now, executedBy);
+        }
         return record;
+    }
+
+    private static Set<String> candidateIds(List<Application> candidates) {
+        Set<String> ids = new HashSet<>();
+        for (Application candidate : candidates) {
+            ids.add(candidate.id());
+        }
+        return ids;
+    }
+
+    /**
+     * 応募を1件保存する。抽選の途中で、ほかの人がその応募を先に変更していた（版が違う）ときは、
+     * 最新の内容を読み直して、同じ結果をもう一度当てはめてから保存し直す。
+     * 読み直したらもう「未着手」でなかった（抽選の間に手で変えられた）応募には、抽選の結果を当てはめない。
+     *
+     * @param winnerIds 抽選の対象者なら当選者のID。印の付け直しだけの応募なら null
+     */
+    private void saveRetryingOnConflict(
+            Application application, Set<String> winnerIds, LotteryMode mode, Instant now, String executedBy) {
+        try {
+            applications.save(application);
+            return;
+        } catch (ConflictException e) {
+            // 下で読み直してやり直す
+        }
+        Application fresh = applications.findById(application.id()).orElse(null);
+        if (fresh == null) {
+            return; // 抽選の間に消された（削除依頼）
+        }
+        if (winnerIds == null) {
+            // 印の付け直しだけ。最新の内容で印を決め直す
+            Map<String, Application> changed = new LinkedHashMap<>();
+            changed.put(fresh.id(), fresh);
+            ApplicationService.refreshFlags(applications, Set.of(fresh.xId()), changed);
+            applications.save(fresh);
+            return;
+        }
+        if (fresh.status() != ApplicationStatus.PENDING) {
+            return;
+        }
+        if (winnerIds.contains(fresh.id())) {
+            fresh.markWonLottery();
+            fresh.changeStatusBySystem(
+                    mode == LotteryMode.LIVE ? ApplicationStatus.ANALYZING : ApplicationStatus.SCHEDULED,
+                    null, now, executedBy, "抽選で当選");
+            fresh.changePosition(application.position());
+        } else if (mode == LotteryMode.BULK) {
+            fresh.changeStatusBySystem(ApplicationStatus.LOST, null, now, executedBy, "抽選で落選");
+        }
+        fresh.replaceFlags(application.flags());
+        applications.save(fresh);
     }
 
     /**

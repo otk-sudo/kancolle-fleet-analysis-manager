@@ -272,8 +272,16 @@ public class ApplicationService {
         }
     }
 
-    /** 1回のまとめてのステータス変更で変えられる最大の件数（DynamoDB のトランザクションに収まるように） */
+    /**
+     * 1回のまとめてのステータス変更で変えられる最大の件数（DynamoDB のトランザクションの最大100件に収まるように）。
+     * 1件につき応募と履歴の2件を書き、さらに印が変わった同じ人の応募も一緒に書くので、余裕をもって25件にしている。
+     * それでも超えたときは、保存先が「件数を減らしてやり直して」と断る（何も保存しない）。
+     */
     public static final int BULK_LIMIT = 25;
+
+    /** まとめて変えられるステータス */
+    public static final Set<ApplicationStatus> BULK_STATUSES =
+            Set.of(ApplicationStatus.PENDING, ApplicationStatus.SCHEDULED, ApplicationStatus.SKIPPED);
 
     /**
      * 複数の応募のステータスをまとめて変える（仕様 5.6）。例: 条件外の応募をまとめて見送りにする。
@@ -293,6 +301,10 @@ public class ApplicationService {
         }
         if (targets.size() > BULK_LIMIT) {
             throw new InvalidValueException("まとめて変えられるのは" + BULK_LIMIT + "件までです");
+        }
+        if (!BULK_STATUSES.contains(status)) {
+            // 「分析中」を何人も同時に作ると配信用画面に誰を出すか紛らわしく、「分析済み」は1人ずつ確かめて付けるため
+            throw new InvalidValueException("まとめて変えられるのは「未着手」「分析予定」「見送り」だけです");
         }
         if (status == ApplicationStatus.SKIPPED && skipReason == null) {
             throw new InvalidValueException("見送りにするときは理由を選んでください");
@@ -450,8 +462,9 @@ public class ApplicationService {
      * {@code afterId} が null ならグループの先頭へ。
      *
      * <p>並び順（position）は、前後の応募の値の「間の値」にする。こうすると動かした1件だけを保存すればよく、
-     * ほかの応募の版が変わらない（ほかの人がその応募を編集中でも、並べ替えのせいで「先に変更されました」にならない）。
-     * 間に入る数がもうないときだけ、グループ全体を 1000, 2000, 3000... と振り直す。
+     * 動かしていない応募の版は変わらない（ほかの人がその応募を編集中でも、並べ替えのせいで「先に変更されました」にならない）。
+     * ただし動かした応募は保存するので版が1つ進む（その応募の詳細を開いている人は、保存すると読み込み直しを求められる）。
+     * 間に入る数がもうないときだけ、グループ全体を 1000, 2000, 3000... と振り直す（このときは振り直した応募の版が進む）。
      */
     public void move(String id, String afterId) {
         synchronized (repository) {
@@ -575,6 +588,10 @@ public class ApplicationService {
      * 保存先から読み込んだ古い内容ではなく、こちらを使って印を決める。
      * 印が変わった応募は {@code changed} に足すので、呼び出した側がまとめて保存する。
      * 抽選（LotteryService）からも使うため static にしている。
+     *
+     * <p>限界: 同じ人の応募は索引（GSI3）から探すので、ほぼ同時（1秒未満）に別のサーバーで保存された応募は見えないことがある。
+     * たとえば同じ人の2件の応募がほぼ同時に届くと、どちらにも「重複」がつかないことがまれにある。
+     * その場合も、同じ人の応募のどれかが次に変わったときの付け直しで正しくなる（design.md 2章）。
      */
     public static void refreshFlags(ApplicationRepository repository, Set<XId> xIds, Map<String, Application> changed) {
         for (XId xId : xIds) {
@@ -654,6 +671,7 @@ public class ApplicationService {
      * 配信用画面の内容（仕様 7.2）。「分析中」の人がいなければ空。
      * 分析中が複数いる場合は、最後に分析中にした人を出す。
      * 比較用の「前回」は、前回分析した応募（仕様 5.5）。
+     * TODO(段階5): 配信用画面に「前回の分析日」も出す（仕様 7.2）。
      */
     public Optional<StreamView> streamView() {
         Application current = currentOnStream();

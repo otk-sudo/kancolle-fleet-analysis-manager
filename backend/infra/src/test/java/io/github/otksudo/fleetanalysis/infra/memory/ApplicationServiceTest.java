@@ -309,6 +309,20 @@ class ApplicationServiceTest {
     }
 
     @Test
+    void 分析予定の応募を残すとほかの未着手の応募だけが見送りになり並び順は変わらない() {
+        Application old = submit("s1", "@a", "2026-10-01T10:00:00Z");
+        Application scheduled = submit("s2", "@a", "2026-10-01T11:00:00Z");
+        changeStatus(scheduled.id(), ApplicationStatus.SCHEDULED);
+        long position = service.get(scheduled.id()).position();
+
+        Application kept = service.keep(scheduled.id(), service.get(scheduled.id()).version(), ACTOR);
+
+        assertThat(kept.status()).isEqualTo(ApplicationStatus.SCHEDULED);
+        assertThat(kept.position()).isEqualTo(position);
+        assertThat(service.get(old.id()).status()).isEqualTo(ApplicationStatus.SKIPPED);
+    }
+
+    @Test
     void 同じ人の応募に分析中があると重複の解消はできない() {
         Application analyzing = submit("s1", "@a", "2026-10-01T10:00:00Z");
         Application resent = submit("s2", "@a", "2026-10-01T11:00:00Z");
@@ -351,6 +365,29 @@ class ApplicationServiceTest {
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("提督s2");
         assertThat(service.get(pending.id()).status()).isEqualTo(ApplicationStatus.PENDING);
+    }
+
+    @Test
+    void まとめての変更はほかの人が先に変えた応募があればどれも変えない() {
+        Application a = submit("s1", "@a", "2026-10-01T10:00:00Z");
+        Application b = submit("s2", "@b", "2026-10-01T11:00:00Z");
+        long staleVersionOfB = service.get(b.id()).version();
+        change(b.id(), ApplicationChanges.none().withMemo("先に変更")); // b の版が進む
+
+        assertThatThrownBy(() -> service.bulkChangeStatus(
+                List.of(new VersionedId(a.id(), service.get(a.id()).version()), new VersionedId(b.id(), staleVersionOfB)),
+                ApplicationStatus.SKIPPED, SkipReason.INELIGIBLE, ACTOR))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("ほかの人が先に変更しました");
+        assertThat(service.get(a.id()).status()).isEqualTo(ApplicationStatus.PENDING);
+    }
+
+    @Test
+    void まとめては分析中にできない() {
+        Application a = submit("s1", "@a", "2026-10-01T10:00:00Z");
+        assertThatThrownBy(() -> service.bulkChangeStatus(
+                List.of(new VersionedId(a.id(), service.get(a.id()).version())), ApplicationStatus.ANALYZING, null, ACTOR))
+                .isInstanceOf(InvalidValueException.class);
     }
 
     @Test

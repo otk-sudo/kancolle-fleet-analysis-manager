@@ -100,9 +100,11 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
                 items.add(putSubmission(application));
                 kinds.add("submission");
             }
-            for (HistoryEntry entry : application.pendingHistory()) {
+            List<HistoryEntry> history = application.pendingHistory();
+            for (int i = 0; i < history.size(); i++) {
+                Map<String, AttributeValue> historyItem = toHistoryItem(application.id(), history.get(i), i);
                 items.add(TransactWriteItem.builder()
-                        .put(p -> p.tableName(tableName).item(toHistoryItem(application.id(), entry)))
+                        .put(p -> p.tableName(tableName).item(historyItem))
                         .build());
                 kinds.add("history");
             }
@@ -403,11 +405,16 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
                         version));
     }
 
-    private static Map<String, AttributeValue> toHistoryItem(String applicationId, HistoryEntry entry) {
+    /**
+     * @param sequence 1回の保存の中での順番。1回の変更でXのIDとステータスを両方変えると、同じ時刻の履歴が2件できるので、
+     *                 変えた順に並ぶよう、時刻の次に順番を書く
+     */
+    private static Map<String, AttributeValue> toHistoryItem(String applicationId, HistoryEntry entry, int sequence) {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put(MainTable.PK, s(applicationKey(applicationId)));
-        // 日時を先に書くと、SK の順（文字列の順）が日時の順になる。同じ時刻の履歴は履歴IDで見分ける
-        item.put(MainTable.SK, s(HISTORY_PREFIX + AttributeValues.sortableTime(entry.at()) + "#" + entry.id()));
+        // 日時を先に書くと、SK の順（文字列の順）が日時の順になる。同じ時刻なら順番（3桁）、最後に履歴IDで見分ける
+        item.put(MainTable.SK, s(HISTORY_PREFIX + AttributeValues.sortableTime(entry.at())
+                + "#" + String.format("%03d", sequence) + "#" + entry.id()));
         item.put("type", s("HISTORY"));
         item.put("id", s(entry.id()));
         item.put("at", s(entry.at().toString()));

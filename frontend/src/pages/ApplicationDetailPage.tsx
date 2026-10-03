@@ -34,7 +34,7 @@ function ApplicationDetailPage() {
   const [xIdInput, setXIdInput] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
-  // 保存などに失敗したときに「読み込み直す」ボタンを出すため
+  // ほかの人が先に変更していたときに「読み込み直す」ボタンを出すため
   const [conflict, setConflict] = useState(false)
 
   /** APIから応募・同じ人の応募・変更履歴を読み込む（画面にはまだ反映しない） */
@@ -94,8 +94,9 @@ function ApplicationDetailPage() {
     if (error) {
       setMessage('')
       setError(errorMessage(error))
-      // ほかの人が先に変更していた（409）などのとき、最新の内容を読み込み直してからやり直せるようにボタンを出す
-      setConflict(true)
+      // ほかの人が先に変更していた（409 = code が "conflict"）ときだけ、最新の内容を読み込み直すボタンを出す。
+      // 入力の誤り（400）のときに出すと、押したときに入力中の内容が消えてしまうため
+      setConflict(typeof error === 'object' && error !== null && 'code' in error && error.code === 'conflict')
       return
     }
     setError('')
