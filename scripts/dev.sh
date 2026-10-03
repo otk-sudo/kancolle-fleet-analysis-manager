@@ -7,7 +7,7 @@
 #
 # 使い方（リポジトリの一番上のフォルダで）:
 #   ./scripts/dev.sh      データをメモリに置く（止めると消え、起動のたびにサンプルデータに戻る）
-#   ./scripts/dev.sh db   データを手元の DynamoDB Local に置く（止めても残る。最初の1回だけサンプルデータが入る）
+#   ./scripts/dev.sh db   データを SQLite のファイル（.local/data/fleet-analysis.db）に置く（止めても残る。最初の1回だけサンプルデータが入る）
 
 # set -e: どれかのコマンドが失敗したら、そこで止める
 set -euo pipefail
@@ -15,35 +15,18 @@ set -euo pipefail
 # このスクリプトがある場所の1つ上（リポジトリの一番上）へ移動する。どこから実行しても同じ動きにするため
 cd "$(dirname "$0")/.."
 
-# ${1:-}: 1つ目の引数（なければ空）。「db」なら DynamoDB Local を使う
-PROFILES=demo
-DYNAMODB_PID=""
 BACKEND_PID=""
-# trap: このスクリプトが終わるとき（Ctrl+C を含む）に、裏で動かしたものも止める
-trap 'echo "バックエンドを止めています..."; kill $BACKEND_PID $DYNAMODB_PID 2>/dev/null || true' EXIT
+# trap: このスクリプトが終わるとき（Ctrl+C を含む）に、裏で動かしたバックエンドも止める
+trap 'echo "バックエンドを止めています..."; kill $BACKEND_PID 2>/dev/null || true' EXIT
 
+# ${1:-}: 1つ目の引数（なければ空）。「db」なら SQLite のファイルに置く
 if [ "${1:-}" = "db" ]; then
-  PROFILES=local,demo
-  echo "DynamoDB Local を起動しています（データは .local/dynamodb に保存されます。ログは dynamodb.log）..."
-  ./gradlew :backend:infra:runDynamoDbLocal > dynamodb.log 2>&1 &
-  DYNAMODB_PID=$!
-  # ポート8000に接続できるまで待つ（DynamoDB Local は中身のない問い合わせにエラーを返すので、-f は付けない）
-  db_started=false
-  for _ in $(seq 1 300); do
-    if curl -s -o /dev/null http://localhost:8000; then
-      db_started=true
-      break
-    fi
-    if ! kill -0 "$DYNAMODB_PID" 2>/dev/null; then
-      echo "DynamoDB Local の起動に失敗しました。dynamodb.log を確認してください" >&2
-      exit 1
-    fi
-    sleep 1
-  done
-  if [ "$db_started" != true ]; then
-    echo "5分待っても DynamoDB Local が応答しませんでした。dynamodb.log を確認してください" >&2
-    exit 1
-  fi
+  export APP_STORAGE=sqlite
+  # バックエンドは backend/app のフォルダで動くので、場所はリポジトリの一番上からの絶対パス（$PWD）で渡す
+  export APP_DATA_DIR="$PWD/.local/data"
+  echo "データは .local/data/fleet-analysis.db に保存されます（このファイルを消すと最初からになります）"
+else
+  export APP_STORAGE=memory
 fi
 
 echo "バックエンドを起動しています（初回は依存ライブラリのダウンロードで数分かかることがあります）..."
@@ -58,7 +41,7 @@ export APP_EXTRA_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then
   APP_EXTRA_ORIGINS="$APP_EXTRA_ORIGINS,https://${CODESPACE_NAME}-5173.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
 fi
-./gradlew :backend:app:bootRun --args="--spring.profiles.active=$PROFILES" > backend.log 2>&1 &
+./gradlew :backend:app:bootRun --args="--spring.profiles.active=demo" > backend.log 2>&1 &
 BACKEND_PID=$!
 
 # バックエンドが応答するまで、1秒ごとに確かめる（最大5分）

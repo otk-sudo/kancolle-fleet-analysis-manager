@@ -2,16 +2,15 @@
 # ${名前:既定値} は「環境変数 名前 があればその値、なければ既定値」という意味。
 
 app:
-  # 保存先。memory = メモリ（止めると消える。試作・テスト用）、dynamodb = DynamoDB（手元の DynamoDB Local）。
-  # TODO(段階4): 次のPRで SQLite に変え、DynamoDB を外す
-  storage: ${APP_STORAGE:memory}
-  # DynamoDB の設定（storage が dynamodb のときだけ使う）
-  dynamodb:
-    table-name: ${DYNAMODB_TABLE:Main}
-    region: ${AWS_REGION:ap-northeast-1}
-    # 接続先。手元の DynamoDB Local を使うときは application-local.yml で指定する
-    endpoint: ${DYNAMODB_ENDPOINT:}
-    create-table: false
+  # 保存先。sqlite = SQLite のファイル（ふだんの形。止めても残る）、
+  # memory = メモリ（止めると消える。テストと、サンプルデータで画面を試すときだけ使う）
+  storage: ${APP_STORAGE:sqlite}
+  # データのファイル（fleet-analysis.db）を置くフォルダ（storage が sqlite のときだけ使う）。
+  # 既定は Windows の「利用者ごとのデータのフォルダ」（環境変数 LOCALAPPDATA。ふつうは C:\Users\名前\AppData\Local）の中。
+  # ツールを入れ直してもデータが消えないよう、インストール先とは別にする（仕様 8.4）。
+  # LOCALAPPDATA がない Mac や Linux（開発用）では、ホームフォルダ（user.home）の中になる。
+  # TODO(段階6): インストーラーを作るときに、置き場所とバックアップの置き場所を決め直す
+  data-dir: ${APP_DATA_DIR:${LOCALAPPDATA:${user.home}}/KancolleFleetAnalysis}
   local-access:
     # ツール自身のほかに受け付ける Origin（どのサイトの画面から送ったか）。カンマ区切り。
     # ツールは配信者さんのPCの中だけで使うので、ふだんは空にする（LocalAccessFilter を参照）。

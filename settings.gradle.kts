@@ -6,6 +6,6 @@ rootProject.name = "kancolle-fleet-analysis-manager"
 
 include(
     "backend:domain", // 業務ロジック（重複判定・抽選など）。他の技術に依存しない
-    "backend:infra", // データベース（DynamoDB）など外部サービスとの接続
+    "backend:infra", // データの保存（SQLite とメモリ）
     "backend:app", // Spring Bootアプリ本体。APIの入口
 )
