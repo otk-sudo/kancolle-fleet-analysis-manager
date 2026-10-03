@@ -29,6 +29,14 @@ type Loaded = {
 type Failure = { title: string; message: string; conflict: boolean }
 
 /**
+ * 読み込み直したときに、保存されている値へ戻す入力欄のまとまり。
+ * status = 「ステータスと配信日」のカード、memo = 「メモ」のカード、xId = 「XのIDを直す」。
+ * カードごとに保存ボタンがあるので、保存したカードの入力欄だけを戻し、ほかのカードで入力中の内容は残す
+ */
+type Section = 'status' | 'memo' | 'xId'
+const ALL_SECTIONS: Section[] = ['status', 'memo', 'xId']
+
+/**
  * 「応募内容と前回との比較」の表に出さない項目。
  * 提督名・XのIDは上の見出しに、艦隊データはボタンに、目標・相談内容は「書いてくれたこと」に、別に出すため
  */
@@ -72,23 +80,39 @@ function ApplicationDetailPage() {
     }
   }, [applicationId])
 
-  /** 読み込んだ結果を画面に反映する（入力欄も、保存されている値に戻す） */
-  const applyResult = useCallback((result: { loaded?: Loaded; error?: unknown }) => {
-    if (!result.loaded) {
-      setFailure({ title: '応募を読み込めませんでした', message: errorMessage(result.error), conflict: false })
-      return
-    }
-    const application = result.loaded.application
-    setLoaded(result.loaded)
-    setFailure(null)
-    setNextStatus(application.status)
-    setSkipReason(application.skipReason ?? '')
-    setStreamDate(application.streamDate ?? '')
-    setMemo(application.memo ?? '')
-    setAnalysisMemo(application.analysisMemo ?? '')
-    setArchiveUrl(application.archiveUrl ?? '')
-    setXIdInput(application.xId)
-  }, [])
+  /**
+   * 読み込んだ結果を画面に反映する。sections に入っているまとまりの入力欄は、保存されている値に戻す。
+   * 応募の版（version）などの表示は、いつも最新にする
+   */
+  const applyResult = useCallback(
+    (result: { loaded?: Loaded; error?: unknown }, sections: Section[] = ALL_SECTIONS) => {
+      if (!result.loaded) {
+        setFailure({
+          title: '応募を読み込めませんでした',
+          message: `${errorMessage(result.error)}。時間をおいてから、画面を読み込み直してください。`,
+          conflict: false,
+        })
+        return
+      }
+      const application = result.loaded.application
+      setLoaded(result.loaded)
+      setFailure(null)
+      if (sections.includes('status')) {
+        setNextStatus(application.status)
+        setSkipReason(application.skipReason ?? '')
+        setStreamDate(application.streamDate ?? '')
+        setAnalysisMemo(application.analysisMemo ?? '')
+        setArchiveUrl(application.archiveUrl ?? '')
+      }
+      if (sections.includes('memo')) {
+        setMemo(application.memo ?? '')
+      }
+      if (sections.includes('xId')) {
+        setXIdInput(application.xId)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     // 「同じ人の応募」のリンクで別の応募に移ったとき、前の応募の結果が後から届いて上書きしないよう、
@@ -127,13 +151,13 @@ function ApplicationDetailPage() {
    * ほかの人が先に変更していた（409）ときだけ「最新の状態を読み込む」ボタンを出す。
    * 入力の誤り（400）のときに出すと、押したときに入力中の内容が消えてしまうため
    */
-  async function finish(error: unknown, okMessage: string) {
+  async function finish(error: unknown, okMessage: string, sections: Section[]) {
     if (error) {
       setMessage('')
       setFailure({ title: `${name}の変更を保存できませんでした`, message: errorMessage(error), conflict: isConflict(error) })
       return
     }
-    applyResult(await load())
+    applyResult(await load(), sections)
     setMessage(okMessage)
   }
 
@@ -165,7 +189,7 @@ function ApplicationDetailPage() {
         archiveUrl,
       },
     })
-    await finish(error, '変更を保存しました')
+    await finish(error, '変更を保存しました', ['status'])
   }
 
   async function saveMemo() {
@@ -173,7 +197,7 @@ function ApplicationDetailPage() {
       params: { path: { applicationId } },
       body: { version: application.version, memo },
     })
-    await finish(error, 'メモを保存しました')
+    await finish(error, 'メモを保存しました', ['memo'])
   }
 
   async function fixXId() {
@@ -192,7 +216,7 @@ function ApplicationDetailPage() {
       params: { path: { applicationId } },
       body: { version: application.version, xId: xIdInput },
     })
-    await finish(error, 'XのIDを直しました')
+    await finish(error, 'XのIDを直しました', ['xId'])
   }
 
   const others = sameApplicant.filter((item) => item.id !== application.id)
@@ -218,7 +242,7 @@ function ApplicationDetailPage() {
       params: { path: { applicationId } },
       body: { version: application.version },
     })
-    await finish(error, '重複を解消しました（ほかの応募を見送りにしました）')
+    await finish(error, '重複を解消しました（ほかの応募を見送りにしました）', ['status'])
   }
 
   // 比較の相手は「前回分析した応募」（仕様 5.5）: 同じ人の「分析済み」のうち、この応募より前に受け付けた中で一番新しいもの。

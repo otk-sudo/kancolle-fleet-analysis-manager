@@ -30,7 +30,9 @@ function LotteryPage() {
   const [includeFlagged, setIncludeFlagged] = useState<Set<string>>(new Set())
   const [winners, setWinners] = useState(1)
   const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
+  // 読み込みの失敗と、抽選の失敗は、画面に出す見出しが違うので分けて覚えておく
+  const [loadError, setLoadError] = useState('')
+  const [runError, setRunError] = useState('')
   const [dialog, confirm] = useConfirm()
 
   const load = useCallback(async (): Promise<{ loaded?: Loaded; error?: unknown }> => {
@@ -61,9 +63,10 @@ function LotteryPage() {
 
   const applyResult = useCallback((result: { loaded?: Loaded; error?: unknown }) => {
     if (!result.loaded) {
-      setError(errorMessage(result.error))
+      setLoadError(errorMessage(result.error))
       return
     }
+    setLoadError('')
     setLoaded(result.loaded)
     setIncludeFlagged(new Set())
   }, [])
@@ -79,9 +82,9 @@ function LotteryPage() {
   }, [load, applyResult])
 
   if (!loaded) {
-    return error ? (
+    return loadError ? (
       <Notice kind="error" title="抽選の情報を読み込めませんでした">
-        {error}
+        {loadError}。時間をおいてから、画面を読み込み直してください。
       </Notice>
     ) : (
       <p>読み込み中…</p>
@@ -102,8 +105,23 @@ function LotteryPage() {
     return { application, flagged, included, counted }
   })
   const targetCount = rows.filter((row) => row.counted).length
-  // 重複が解消されていない人（重複の印がついた未着手の応募がある人）
-  const unresolved = loaded.pending.filter((a) => a.flags.some((flag) => flag.type === 'duplicate'))
+  // 重複が解消されていない人（重複の印がついた未着手の応募がある人）。同じ人は1回だけ知らせる
+  const unresolved = new Map<string, { application: Application; earlierPending: boolean }>()
+  for (const application of loaded.pending) {
+    if (unresolved.has(application.xId) || !application.flags.some((flag) => flag.type === 'duplicate')) continue
+    // 重複の印は、先に受け付けた応募がまだ終わっていないときに、あとの応募に付く。
+    // 先の応募が「未着手」で印がなければ、そちらが抽選に入る。先の応募が「分析予定」などなら、どちらも抽選に入らない
+    const earlierPending = loaded.pending.some(
+      (other) =>
+        other.xId === application.xId &&
+        other.id !== application.id &&
+        !hasBlockingFlag(other) &&
+        Date.parse(other.receivedAt) <= Date.parse(application.receivedAt),
+    )
+    unresolved.set(application.xId, { application, earlierPending })
+  }
+  // 当選人数が対象の人数より多いと、全員が当選するだけになるので抽選できないようにする
+  const tooMany = winners > targetCount
 
   function toggle(id: string) {
     const next = new Set(includeFlagged)
@@ -121,11 +139,12 @@ function LotteryPage() {
       title: `${targetCount}人から${winners}人を抽選しますか？`,
       body: (
         <p className="readable">
-          当選した人は「分析予定」、外れた人は「落選」になります。抽選の結果は記録に残ります。
+          当選した{winners}人は「分析予定」、外れた{targetCount - winners}人は「落選」になります。抽選の結果は記録に残ります。
           {loaded?.lossBonusEnabled && ' 落選した回数が多い人ほど当たりやすくなります（落選補正）。'}
         </p>
       ),
       confirmLabel: `${winners}人を抽選する`,
+      cancelLabel: '戻って見直す',
       danger: true,
     })
     if (!ok) return
@@ -134,10 +153,10 @@ function LotteryPage() {
     })
     if (error || !data) {
       setMessage('')
-      setError(errorMessage(error))
+      setRunError(errorMessage(error))
       return
     }
-    setError('')
+    setRunError('')
     applyResult(await load())
     setMessage(`抽選しました。${data.entries.length}人から${data.entries.filter((e) => e.won).length}人が当選しました。`)
   }
@@ -166,14 +185,19 @@ function LotteryPage() {
         </p>
       </div>
 
-      {error && (
+      {runError && (
         <Notice kind="error" title="抽選できませんでした">
-          {error}
+          {runError}
+        </Notice>
+      )}
+      {loadError && (
+        <Notice kind="error" title="抽選の情報を読み込み直せませんでした">
+          {loadError}。画面を読み込み直してください。
         </Notice>
       )}
       {message && <Notice kind="ok" title={message} />}
       {!loaded.lotteryEnabled && (
-        <Notice kind="error" title="抽選はオフになっています" action={<Link to="/settings">設定を開く</Link>}>
+        <Notice kind="info" title="抽選はオフになっています" action={<Link to="/settings">設定を開く</Link>}>
           抽選するときは、設定で「抽選を使う」をオンにしてください。
         </Notice>
       )}
@@ -182,11 +206,14 @@ function LotteryPage() {
         <section className="card main-column">
           <h2 className="card-title">抽選の対象（{targetCount}人）</h2>
 
-          {unresolved.map((application) => (
+          {[...unresolved.values()].map(({ application, earlierPending }) => (
             <div key={application.id} role="note" className="notice notice-error">
               <span className="notice-body">
                 <strong>{application.admiralName} 提督の重複が解消されていません。</strong>
-                このまま抽選すると、受付が早い方の応募だけが抽選に入ります。どちらの応募を残すか、先に決めておくのがおすすめです。
+                {earlierPending
+                  ? 'このまま抽選すると、受付が早い方の応募だけが抽選に入ります。'
+                  : '先に受け付けた応募がまだ終わっていない（分析予定など）ため、この人の応募は抽選に入りません。'}
+                どちらの応募を残すか、先に決めておくのがおすすめです。
               </span>
               <Link to={`/applications/${application.id}`}>{application.admiralName} 提督の応募を確認する</Link>
             </div>
@@ -210,13 +237,15 @@ function LotteryPage() {
                     <tr key={application.id} className={counted ? undefined : 'excluded'}>
                       <td>
                         {/* 印のない応募は必ず対象になるので、外せない（チェックを変えられない） */}
-                        <input
-                          type="checkbox"
-                          aria-label={`${application.admiralName} 提督を抽選の対象に含める`}
-                          checked={included}
-                          disabled={!flagged}
-                          onChange={() => toggle(application.id)}
-                        />
+                        <label className="check-cell">
+                          <input
+                            type="checkbox"
+                            aria-label={`${application.admiralName} 提督を抽選の対象に含める`}
+                            checked={included}
+                            disabled={!flagged}
+                            onChange={() => toggle(application.id)}
+                          />
+                        </label>
                       </td>
                       <td>
                         <Link className="applicant-name" to={`/applications/${application.id}`}>
@@ -257,11 +286,12 @@ function LotteryPage() {
                 />
                 <span>人 ／ 対象 {targetCount}人</span>
               </div>
+              {tooMany && <span className="field-help error">当選人数は、対象の人数（{targetCount}人）以下にしてください。</span>}
             </div>
             <button
               type="button"
               className="button primary"
-              disabled={!loaded.lotteryEnabled || targetCount === 0 || winners < 1}
+              disabled={!loaded.lotteryEnabled || targetCount === 0 || winners < 1 || tooMany}
               onClick={() => void runBulk()}
             >
               抽選の内容を確認する
@@ -286,14 +316,29 @@ function LotteryPage() {
                         {lottery.entries.length}人から{won.length}人が当選 ・ {lottery.executedBy}
                       </span>
                       <details className="more">
-                        <summary>当選した人と記録</summary>
-                        <ul className="plain">
-                          {won.map((entry) => (
-                            <li key={entry.applicationId}>
-                              <Link to={`/applications/${entry.applicationId}`}>{nameOf(entry.applicationId)}</Link>
-                            </li>
-                          ))}
-                        </ul>
+                        <summary>対象者ごとの当たりやすさと結果</summary>
+                        <div className="table-scroll">
+                          <table className="simple compact-table">
+                            <thead>
+                              <tr>
+                                <th scope="col">提督名</th>
+                                <th scope="col">当たりやすさ</th>
+                                <th scope="col">結果</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {lottery.entries.map((entry) => (
+                                <tr key={entry.applicationId}>
+                                  <td>
+                                    <Link to={`/applications/${entry.applicationId}`}>{nameOf(entry.applicationId)}</Link>
+                                  </td>
+                                  <td className="num">{entry.weight}</td>
+                                  <td>{entry.won ? '当選' : '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                         {/* 同じ種と対象者なら同じ結果になる。後から公平性を確かめるために記録している（仕様 6.4） */}
                         <span className="small sub">乱数の種: {lottery.seed}</span>
                       </details>

@@ -26,7 +26,10 @@
   --color-warn: #a1251b; /* 重複・条件外・取り消し */
   --color-info: #1f4e9a; /* 再応募 */
   --color-info-soft: #e6edf8;
-  --color-ok: #1d5c3a; /* 「保存しました」 */
+  --color-on-dark: #ffffff; /* 濃い地（紺・赤茶）の上の文字 */
+  --color-on-dark-line: #8fa3c4; /* 紺地の上の枠線（「選ぶのをやめる」） */
+  --color-backdrop: rgba(20, 38, 74, 0.35); /* ダイアログの後ろを暗くする色（紺を透かしたもの） */
+  --color-shadow: rgba(20, 38, 74, 0.25); /* ダイアログの影 */
   --radius-card: 10px;
   --radius-control: 8px;
   /* 押せるものの高さ。指でもマウスでも押しやすいよう44px以上にする（handoff.md の8） */
@@ -291,11 +294,11 @@ input[type='checkbox'] {
 }
 .button.primary {
   background: var(--color-navy);
-  color: #ffffff;
+  color: var(--color-on-dark);
 }
 .button.primary:hover {
   background: var(--color-navy-hover);
-  color: #ffffff;
+  color: var(--color-on-dark);
 }
 .button.danger {
   border-color: var(--color-warn);
@@ -304,7 +307,7 @@ input[type='checkbox'] {
 }
 .button.danger.filled {
   background: var(--color-warn);
-  color: #ffffff;
+  color: var(--color-on-dark);
   font-weight: 700;
 }
 .button:disabled {
@@ -357,8 +360,9 @@ input[type='checkbox'] {
 .notice.notice-error .notice-title {
   color: var(--color-warn);
 }
-.notice.notice-ok .notice-title {
-  color: var(--color-ok);
+.notice.notice-ok .notice-title,
+.notice.notice-info .notice-title {
+  color: var(--color-navy);
 }
 
 /* ───────── ステータスと印 ───────── */
@@ -378,7 +382,7 @@ input[type='checkbox'] {
 .status-analyzing {
   background: var(--color-navy);
   border-color: var(--color-navy);
-  color: #ffffff;
+  color: var(--color-on-dark);
 }
 .status-scheduled {
   border-color: var(--color-navy);
@@ -402,7 +406,7 @@ input[type='checkbox'] {
 }
 .mark-duplicate {
   background: var(--color-warn);
-  color: #ffffff;
+  color: var(--color-on-dark);
 }
 .mark-ineligible {
   background: var(--color-surface);
@@ -432,7 +436,7 @@ input[type='checkbox'] {
   border-radius: 4px;
   font-size: 12px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--color-on-dark);
   background: var(--color-navy);
   white-space: nowrap;
 }
@@ -540,13 +544,28 @@ table.applications tbody tr.item.drop-after {
 .applicant-name {
   font-weight: 700;
 }
+/*
+ * 表の中のチェックボックス。チェックボックス自体は20pxと小さいので、まわりの label を44px四方にして、
+ * そこを押してもチェックが切り替わるようにする（押せるものは44px以上。handoff.md の8）
+ */
+.check-cell {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  margin: -12px;
+  cursor: pointer;
+}
+
 /* 並べ替えのつまみ */
 .drag-handle {
-  width: 28px;
-  height: 40px;
+  width: 32px;
+  height: var(--control-height);
   border: 0;
   background: transparent;
-  color: #7a8394;
+  color: var(--color-text-sub);
   cursor: grab;
   padding: 0;
 }
@@ -620,11 +639,16 @@ table.simple td {
 table.simple thead th {
   border-top: 0;
 }
+/* 抽選記録の中の表のように、狭い場所に置く小さな表 */
+table.simple.compact-table {
+  min-width: 0;
+  font-size: 13px;
+}
 table.simple tr > :first-child {
   padding-left: 0;
 }
 table.simple tr.excluded {
-  color: #6a7383;
+  color: var(--color-text-sub);
 }
 
 /* ───────── ステータスで絞り込むタブ ───────── */
@@ -655,10 +679,10 @@ table.simple tr.excluded {
   border-color: var(--color-warn);
   color: var(--color-warn);
 }
-.status-tab[aria-selected='true'] {
+.status-tab[aria-pressed='true'] {
   background: var(--color-navy);
   border-color: var(--color-navy);
-  color: #ffffff;
+  color: var(--color-on-dark);
 }
 
 /* 絞り込みの入力欄を横に並べる（狭いと折り返す） */
@@ -680,7 +704,7 @@ table.simple tr.excluded {
 /* 紺地に白文字は「その画面でいちばん大事な1か所」にだけ使う。管理画面ではこのバー */
 .bulk-bar {
   background: var(--color-navy);
-  color: #ffffff;
+  color: var(--color-on-dark);
   border-radius: var(--radius-card);
   padding: 10px 16px;
   display: flex;
@@ -697,9 +721,9 @@ table.simple tr.excluded {
   border: 0;
 }
 .bulk-bar .button.ghost {
-  border: 1px solid #8fa3c4;
+  border: 1px solid var(--color-on-dark-line);
   background: transparent;
-  color: #ffffff;
+  color: var(--color-on-dark);
   font-weight: 400;
 }
 .bulk-bar .bulk-warning {
@@ -724,14 +748,14 @@ dialog.confirm {
   padding: 24px;
   max-width: min(520px, calc(100vw - 32px));
   color: var(--color-text);
-  box-shadow: 0 12px 40px rgba(20, 38, 74, 0.25);
+  box-shadow: 0 12px 40px var(--color-shadow);
 }
 dialog.confirm[open] {
   /* 動きの2つ目: 確認のダイアログが開くとき */
   animation: dialog-in 160ms ease-out;
 }
 dialog.confirm::backdrop {
-  background: rgba(20, 38, 74, 0.35);
+  background: var(--color-backdrop);
 }
 .confirm-title {
   margin: 0 0 8px;

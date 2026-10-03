@@ -11,8 +11,8 @@ import Notice from '../components/Notice'
 function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null)
   const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
-  const [conflict, setConflict] = useState(false)
+  // 失敗したときに出す見出しと内容。読み込みの失敗と保存の失敗で見出しを変える
+  const [failure, setFailure] = useState<{ title: string; message: string; conflict: boolean } | null>(null)
 
   const load = useCallback(async () => {
     const { data, error } = await api.GET('/settings/{kind}', { params: { path: { kind: 'lottery' } } })
@@ -21,12 +21,15 @@ function SettingsPage() {
 
   const applyResult = useCallback((result: Awaited<ReturnType<typeof load>>) => {
     if (!result.data) {
-      setError(errorMessage(result.error))
+      setFailure({
+        title: '設定を読み込めませんでした',
+        message: `${errorMessage(result.error)}。時間をおいてから、画面を読み込み直してください。`,
+        conflict: false,
+      })
       return
     }
     setSettings(result.data)
-    setError('')
-    setConflict(false)
+    setFailure(null)
   }, [])
 
   useEffect(() => {
@@ -55,8 +58,7 @@ function SettingsPage() {
     })
     if (error) {
       setMessage('')
-      setError(errorMessage(error))
-      setConflict(isConflict(error))
+      setFailure({ title: '設定を保存できませんでした', message: errorMessage(error), conflict: isConflict(error) })
       return
     }
     applyResult(await load())
@@ -75,19 +77,19 @@ function SettingsPage() {
     <>
       <h1 className="page-title">設定</h1>
 
-      {error && (
+      {failure && (
         <Notice
           kind="error"
-          title="設定を保存できませんでした"
+          title={failure.title}
           action={
-            conflict && (
+            failure.conflict && (
               <button type="button" className="button primary" onClick={() => void reload()}>
                 最新の状態を読み込む
               </button>
             )
           }
         >
-          {error}
+          {failure.message}
         </Notice>
       )}
       {message && <Notice kind="ok" title={message} />}

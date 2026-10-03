@@ -110,7 +110,9 @@ function ApplicationListPage() {
       filtered ? fetchAllApplications({ status: OPEN_STATUSES, order: 'queue' }) : null,
       api.GET('/settings/{kind}', { params: { path: { kind: 'lottery' } } }),
     ])
-    return { list, unfiltered, lotteryEnabled: settings.data?.value.enabled === true }
+    // 設定が読めなかったときは、抽選を使うかどうかがわからないので null にする（「次に分析」を付けない）
+    const lotteryEnabled = settings.data ? settings.data.value.enabled === true : null
+    return { list, unfiltered, lotteryEnabled }
   }, [purpose, rankingEffort, flag, keyword, filtered])
 
   /** 読み込んだ結果を画面に反映する */
@@ -122,8 +124,10 @@ function ApplicationListPage() {
     }
     setFailure(null)
     setItems(result.list.items)
-    setLotteryEnabled(result.lotteryEnabled)
-    setNextId(findNext(result.unfiltered?.items ?? result.list.items, result.lotteryEnabled))
+    setLotteryEnabled(result.lotteryEnabled === true)
+    setNextId(
+      result.lotteryEnabled === null ? null : findNext(result.unfiltered?.items ?? result.list.items, result.lotteryEnabled),
+    )
     // 読み込み直したら選択は外す（古い版のまま変更しないように）
     setSelected(new Set())
   }, [])
@@ -334,13 +338,16 @@ function ApplicationListPage() {
       )}
       {message && <Notice kind="ok" title={message} />}
 
-      <div role="tablist" aria-label="ステータスで絞り込む" className="status-tabs">
+      {/*
+        ステータスで絞り込むボタンの並び。role="group" と aria-label で「ひとまとまりのボタン」として読み上げさせ、
+        aria-pressed で、どれが押されている（選ばれている）かを伝える
+      */}
+      <div role="group" aria-label="ステータスで絞り込む" className="status-tabs">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
-            role="tab"
-            aria-selected={tab === t.key}
+            aria-pressed={tab === t.key}
             className={t.warn ? 'status-tab warn' : 'status-tab'}
             onClick={() => {
               setTab(t.key)
@@ -443,14 +450,16 @@ function ApplicationListPage() {
           <thead>
             <tr>
               <th scope="col">
-                <input
-                  type="checkbox"
-                  aria-label="表示しているすべての応募を選ぶ"
-                  checked={allVisibleSelected}
-                  onChange={() =>
-                    setSelected(allVisibleSelected ? new Set() : new Set(visible.map((item) => item.id)))
-                  }
-                />
+                <label className="check-cell">
+                  <input
+                    type="checkbox"
+                    aria-label="表示しているすべての応募を選ぶ"
+                    checked={allVisibleSelected}
+                    onChange={() =>
+                      setSelected(allVisibleSelected ? new Set() : new Set(visible.map((item) => item.id)))
+                    }
+                  />
+                </label>
               </th>
               <th scope="col">
                 <span className="visually-hidden">順番を動かす</span>
@@ -488,12 +497,15 @@ function ApplicationListPage() {
                     onDrop={onDrop}
                   >
                     <td>
-                      <input
-                        type="checkbox"
-                        aria-label={`${item.admiralName} 提督を選ぶ`}
-                        checked={selected.has(item.id)}
-                        onChange={() => toggle(item.id)}
-                      />
+                      {/* チェックボックスは小さいので、まわりの label まで押せる範囲にして44px以上にする */}
+                      <label className="check-cell">
+                        <input
+                          type="checkbox"
+                          aria-label={`${item.admiralName} 提督を選ぶ`}
+                          checked={selected.has(item.id)}
+                          onChange={() => toggle(item.id)}
+                        />
+                      </label>
                     </td>
                     <td>
                       {draggable && (

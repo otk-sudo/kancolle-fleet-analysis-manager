@@ -8,6 +8,8 @@ export type ConfirmOptions = {
   body?: ReactNode
   /** 実行するボタンの文言。何が起きるかがわかる言葉にする（例:「2件を見送りにする」） */
   confirmLabel: string
+  /** やめるボタンの文言。省略すると「やめる」（例: 抽選では「戻って見直す」） */
+  cancelLabel?: string
   /** 元に戻しにくい操作（抽選など）のときは true にして、ボタンを赤茶にする */
   danger?: boolean
 }
@@ -42,7 +44,7 @@ function ConfirmDialog({ options, onClose }: { options: ConfirmOptions; onClose:
       <div className="confirm-actions">
         {/* 間違えて Enter を押しても実行しないよう、最初にキーボードが当たる（autoFocus）のは「やめる」にする */}
         <button type="button" className="button" autoFocus onClick={() => onClose(false)}>
-          やめる
+          {options.cancelLabel ?? 'やめる'}
         </button>
         <button
           type="button"

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 
 type Props = {
-  /** error = 失敗（赤茶の枠）、ok = 成功 */
-  kind: 'error' | 'ok'
+  /** error = 失敗（赤茶の枠）、ok = 成功、info = 失敗ではないお知らせ（「抽選はオフになっています」など） */
+  kind: 'error' | 'ok' | 'info'
   /** 何が起きたか（例:「夕凪 提督の変更を保存できませんでした」） */
   title: string
   /** 原因と、次にすること（デザインの決まり: エラーには原因と次にすることを書く） */
@@ -14,7 +14,7 @@ type Props = {
 /**
  * 画面の上に出すお知らせ（共通の部品）。
  * 失敗のときは role="alert" にして、画面読み上げソフトがすぐに読み上げるようにする。
- * 成功のときは role="status"（ほかの読み上げを邪魔せず、区切りのよいところで読み上げる）。
+ * 成功やお知らせのときは role="status"（ほかの読み上げを邪魔せず、区切りのよいところで読み上げる）。
  */
 function Notice({ kind, title, children, action }: Props) {
   return (
