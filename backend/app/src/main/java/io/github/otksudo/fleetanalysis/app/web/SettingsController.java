@@ -46,7 +46,7 @@ public class SettingsController implements SettingsApi {
 
     private static void requireLottery(String kind) {
         if (!LOTTERY.equals(kind)) {
-            // TODO(段階7): 選択肢（options）・ステータス（statuses）・条件ルール（rules）の設定に対応する
+            // TODO(段階9): 選択肢（options）・ステータス（statuses）・条件ルール（rules）の設定に対応する
             throw new NotImplementedYetException("試作では抽選設定（lottery）だけに対応しています: " + kind);
         }
     }

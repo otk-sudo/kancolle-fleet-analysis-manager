@@ -13,11 +13,15 @@ export default defineConfig({
     allowedHosts: ['.app.github.dev'],
     // 開発中だけの設定: 画面から /api/... へのリクエストを、手元で動かしているバックエンド（ポート8080）へ転送する。
     // バックエンドのURLには /api が付かないため、転送するときに取り除く。
-    // 例: /api/applications → http://localhost:8080/applications
-    // 本番では API Gateway の設定で同じことを行う（段階4）
+    // 例: /api/applications → http://127.0.0.1:8080/applications
+    // バックエンドは 127.0.0.1 でだけ待ち受けるので、localhost ではなく 127.0.0.1 を書く
+    // （localhost は、PCによっては IPv6 の ::1 を先に使い、つながらないことがあるため）。
+    // changeOrigin: true にすると、Host ヘッダーを転送先（127.0.0.1:8080）に書き換えて送る。
+    // バックエンドは Host が 127.0.0.1 か localhost の要求だけを受け付けるため（LocalAccessFilter）。
+    // TODO(段階4): 次のPRで、画面をバックエンドから配信するようにしたら、この転送のしかたを見直す
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },

@@ -8,7 +8,7 @@ public enum FlagType {
     DUPLICATE("duplicate"),
     /** 同じXのIDで、過去に終わった応募がある */
     REAPPLY("reapply"),
-    /** 条件外（段階7で条件ルールを実装） */
+    /** 条件外（段階9で条件ルールを実装） */
     INELIGIBLE("ineligible");
 
     private final String code;

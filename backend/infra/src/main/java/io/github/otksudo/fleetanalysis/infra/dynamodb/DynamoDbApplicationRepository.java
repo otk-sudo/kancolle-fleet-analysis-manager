@@ -262,7 +262,7 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
      * 応募本体と回答IDの控えは、トランザクションで一緒に消す。片方だけ残ると、
      * 控えだけが残った回答をあとで再送したときに、ずっと「登録済み」扱いで断られてしまうため。
      *
-     * <p>TODO(段階6): 抽選記録の中の応募IDの置き換え（「削除済み」にする）も行う。
+     * <p>TODO(段階9): 抽選記録の中の応募IDの置き換え（「削除済み」にする）も行う。
      */
     @Override
     public void deleteByXId(XId xId) {

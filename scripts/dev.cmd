@@ -40,9 +40,9 @@ if errorlevel 1 (
 
 rem --- [2] Stop a backend left over from the previous run ---
 rem (port 8080 = backend, port 8000 = DynamoDB Local in db mode)
-rem Any HTTP answer (even 401 or 404) means something is running on 8080, so no -f here
+rem Any HTTP answer (even 403 or 404) means something is running on 8080, so no -f here
 set LEFTOVER=0
-curl.exe -s -o nul http://localhost:8080/dev/users
+curl.exe -s -o nul http://127.0.0.1:8080/applications
 if not errorlevel 1 set LEFTOVER=1
 curl.exe -s -o nul http://localhost:8000
 if not errorlevel 1 set LEFTOVER=1
@@ -76,15 +76,17 @@ goto :wait_db
 :start_backend
 rem --- [3] Start the backend in the background (log: backend.log) ---
 echo Starting the backend. The first run can take several minutes...
+rem The screen is served by Vite on port 5173, so the backend must accept requests from there
+set APP_EXTRA_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 if exist backend.log del backend.log 2>nul
 if exist backend.exited del backend.exited 2>nul
 start "" /b cmd /c "call gradlew.bat :backend:app:bootRun --args=--spring.profiles.active=%PROFILES% --console=plain > backend.log 2>&1 & echo exited> backend.exited"
 
 rem --- [4] Wait until the backend answers (max 10 minutes) ---
-rem /dev/users needs no login (other APIs answer 401 without a token)
+rem The backend listens on 127.0.0.1 only
 set /a tries=0
 :wait
-curl.exe -fs -o nul http://localhost:8080/dev/users
+curl.exe -fs -o nul http://127.0.0.1:8080/applications
 if not errorlevel 1 goto :started
 if exist backend.exited goto :backend_failed
 set /a tries+=1

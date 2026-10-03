@@ -7,12 +7,14 @@ info:
 
     ツールは配信者さんのPCの中だけで動き（仕様 v1.2）、ログインはない。
     代わりに、ほかのWebサイトからの攻撃を防ぐため、すべてのAPIで次を確かめる（docs/design.md 1章）。
-    どちらかに当てはまらない要求は、APIごとの説明に書いていなくても 403（code は forbidden_origin）になる。
+    どちらかに当てはまらない要求は 403（code は forbidden_origin）になる。
     - Host ヘッダーが 127.0.0.1:<ポート> か localhost:<ポート> であること
     - データを変える要求（POST・PUT・PATCH・DELETE）では、Origin ヘッダーがツール自身であること（Origin がない要求は通す）
 servers:
   - url: http://127.0.0.1:8080
     description: 配信者さんのPCで動いているツール（ポートは段階6で決める）
+# ログインはないので、どのAPIにも認証（トークンなど）を求めない。空の一覧で「認証なし」をはっきり書く
+security: []
 tags:
   - name: applications
   - name: applicants
@@ -64,6 +66,8 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 一覧
           content:
@@ -78,6 +82,8 @@ paths:
       operationId: getApplication
       summary: 応募詳細
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 詳細
           content:
@@ -100,6 +106,8 @@ paths:
             schema:
               $ref: '#/components/schemas/ApplicationUpdate'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 更新後の応募
           content:
@@ -120,6 +128,8 @@ paths:
       operationId: listApplicationHistory
       summary: 応募の変更履歴（ステータス・XのIDを、いつ・誰が・何から何へ変えたか）
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 履歴（古い順）
           content:
@@ -147,6 +157,8 @@ paths:
             schema:
               $ref: '#/components/schemas/KeepRequest'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 残した応募（引き継いだあと）
           content:
@@ -174,6 +186,8 @@ paths:
             schema:
               $ref: '#/components/schemas/BulkStatusRequest'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 変更後の応募
           content:
@@ -205,6 +219,8 @@ paths:
                   type: [string, 'null']
               required: [after]
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '204':
           description: 並べ替え完了
   /applicants/{xId}/applications:
@@ -215,6 +231,8 @@ paths:
       operationId: listApplicantHistory
       summary: 同じ応募者の応募履歴（過去応募との比較用）
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 履歴（新しい順）
           content:
@@ -231,6 +249,8 @@ paths:
       operationId: deleteApplicant
       summary: 削除依頼への対応
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '204':
           description: 削除完了
   /stream/current:
@@ -239,6 +259,8 @@ paths:
       operationId: getStreamView
       summary: 配信用画面の表示内容（いま分析中の1人）
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 表示内容。分析中の人がいなければ current は null
           content:
@@ -256,6 +278,8 @@ paths:
         抽選を使う設定のときは未着手の人を選ばない（抽選で選ぶため）。
         次の人がいなければ、分析済みにするだけで current は null になる。
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 進めた後の表示内容
           content:
@@ -271,6 +295,8 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 抽選記録（新しい順）
           content:
@@ -296,6 +322,8 @@ paths:
             schema:
               $ref: '#/components/schemas/LotteryRequest'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '201':
           description: 抽選結果
           content:
@@ -321,6 +349,8 @@ paths:
       operationId: getSettings
       summary: 設定の取得
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 設定
           content:
@@ -338,6 +368,8 @@ paths:
             schema:
               $ref: '#/components/schemas/Settings'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 更新後の設定
           content:
@@ -368,6 +400,8 @@ paths:
                   type: string
               required: [file, mapping, formVersion]
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 取り込み結果
           content:
@@ -421,6 +455,12 @@ components:
   responses:
     BadRequest:
       description: 入力が不正
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ForbiddenOrigin:
+      description: ほかのWebサイトからの要求なので断った（code は forbidden_origin。Host か Origin がツール自身でない）
       content:
         application/json:
           schema:

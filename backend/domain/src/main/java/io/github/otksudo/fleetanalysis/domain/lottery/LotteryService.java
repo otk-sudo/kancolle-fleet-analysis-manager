@@ -110,13 +110,13 @@ public class LotteryService {
         // 抽選でステータスが変わった人の、ほかの応募の印を付け直す（例: 落選した応募の後に送られた応募は「重複」から「再応募」へ）
         ApplicationService.refreshFlags(applications, affected, changed);
 
-        // 抽選記録を先に保存する。応募の保存が途中で失敗しても、記録があれば抽選の取り消し（段階6）で元に戻せるため。
+        // 抽選記録を先に保存する。応募の保存が途中で失敗しても、記録があれば抽選の取り消し（段階8）で元に戻せるため。
         // 逆の順番だと、「落選」になったのに記録がない（取り消せない）応募が残ってしまう
         LotteryRecord record = new LotteryRecord(UUID.randomUUID().toString(), mode, now, seed, recordEntries);
         lotteries.save(record);
 
         // 抽選の対象者は数百人になることがあり、1回のトランザクション（最大100件）に収まらないため、1件ずつ保存する。
-        // TODO(段階6): 抽選の取り消しを作るときに、全部を確実にそろえる方法（再実行など）を見直す
+        // TODO(段階8): 抽選の取り消しを作るときに、全部を確実にそろえる方法（再実行など）を見直す
         Set<String> candidateIds = candidateIds(candidates);
         for (Application application : changed.values()) {
             saveRetryingOnConflict(application, candidateIds.contains(application.id()) ? winnerIds : null,

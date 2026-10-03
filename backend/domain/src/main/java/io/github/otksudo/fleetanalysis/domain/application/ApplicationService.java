@@ -553,7 +553,7 @@ public class ApplicationService {
 
     /** 削除依頼への対応（仕様 8.1）。 */
     public void deleteApplicant(XId xId) {
-        // TODO(段階6): 抽選記録に残る応募IDを「削除済み」に置き換える（仕様 8.1）
+        // TODO(段階9): 抽選記録に残る応募IDを「削除済み」に置き換える（仕様 8.1）
         synchronized (repository) {
             repository.deleteByXId(xId);
         }
@@ -669,7 +669,7 @@ public class ApplicationService {
      * 配信用画面の内容（仕様 7.2）。「分析中」の人がいなければ空。
      * 分析中が複数いる場合は、最後に分析中にした人を出す。
      * 比較用の「前回」は、前回分析した応募（仕様 5.5）。
-     * TODO(段階5): 配信用画面に「前回の分析日」も出す（仕様 7.2）。
+     * TODO(段階7): 配信用画面に「前回の分析日」も出す（仕様 7.2）。
      */
     public Optional<StreamView> streamView() {
         Application current = currentOnStream();
