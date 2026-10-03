@@ -8,11 +8,16 @@ rem  Windows), so Japanese text here breaks the script.
 rem  The Japanese explanation of every step is in scripts/README.md.
 rem
 rem  Usage: double-click scripts\dev.cmd in Explorer.
+rem         scripts\dev.cmd db  = keep data in DynamoDB Local (or double-click dev-db.cmd)
 rem  To stop: close this window.
 rem ======================================================================
 
 setlocal
 cd /d "%~dp0.."
+
+rem "db" as the first argument: keep data in DynamoDB Local (profile "local")
+set PROFILES=demo
+if /i "%~1"=="db" set PROFILES=local,demo
 
 rem --- [1] Check required tools (Java 21, Node.js 22, curl.exe) ---
 if exist "%JAVA_HOME%\bin\java.exe" goto :check_node
@@ -41,11 +46,33 @@ if not errorlevel 1 (
   timeout /t 3 /nobreak >nul
 )
 
+rem --- [3a] (db only) Start DynamoDB Local on port 8000 (log: dynamodb.log) ---
+if /i not "%~1"=="db" goto :start_backend
+echo Starting DynamoDB Local. Data is kept in .local\dynamodb ...
+if exist dynamodb.exited del dynamodb.exited 2>nul
+start "" /b cmd /c "call gradlew.bat :backend:infra:runDynamoDbLocal --console=plain > dynamodb.log 2>&1 & echo exited> dynamodb.exited"
+set /a dbtries=0
+:wait_db
+curl.exe -s -o nul http://localhost:8000
+if not errorlevel 1 goto :start_backend
+if exist dynamodb.exited (
+  echo [ERROR] DynamoDB Local failed to start. See dynamodb.log
+  goto :error
+)
+set /a dbtries+=1
+if %dbtries% geq 600 (
+  echo [ERROR] DynamoDB Local did not start within 10 minutes. See dynamodb.log
+  goto :error
+)
+timeout /t 1 /nobreak >nul
+goto :wait_db
+
+:start_backend
 rem --- [3] Start the backend in the background (log: backend.log) ---
 echo Starting the backend. The first run can take several minutes...
 if exist backend.log del backend.log 2>nul
 if exist backend.exited del backend.exited 2>nul
-start "" /b cmd /c "call gradlew.bat :backend:app:bootRun --args=--spring.profiles.active=demo --console=plain > backend.log 2>&1 & echo exited> backend.exited"
+start "" /b cmd /c "call gradlew.bat :backend:app:bootRun --args=--spring.profiles.active=%PROFILES% --console=plain > backend.log 2>&1 & echo exited> backend.exited"
 
 rem --- [4] Wait until the backend answers (max 10 minutes) ---
 set /a tries=0

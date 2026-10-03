@@ -19,7 +19,12 @@ Java（Spring Boot）で作るサーバー側のプログラムです。3つの�
 6. `app/.../app/web/ApplicationsController.java`: APIの入口。生成されたインターフェースを実装する例
 7. `app/.../app/config/ServiceConfig.java`: 部品（Bean）の組み立て
 
-試作版では、データを DynamoDB ではなくメモリに保存しています（`infra/.../infra/memory/`）。DynamoDB版は段階1で作ります。
+データの保存先は2種類あり、設定 `app.storage` で切り替えます（`app/.../app/config/ServiceConfig.java`）。
+- `memory`（初期値）: メモリに保存する（`infra/.../infra/memory/`）。止めると消える。試作・テスト用
+- `dynamodb`: DynamoDB に保存する（`infra/.../infra/dynamodb/`）。本番と、手元の DynamoDB Local 用
+
+DynamoDB Local は、AWSの公式が配っている「自分のPCで動く DynamoDB の代わり」です（公式: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html ）。
+Gradle が自動でダウンロードするので、自分で入れる必要はありません。ただし、中で使う部品（SQLite）が Linux（x86_64）・Windows（64bit）・Intel の Mac 用しか配られていないため、Apple シリコン（M1など）の Mac では動きません（その場合はメモリ保存で試してください）。
 
 ## よく使うコマンド（リポジトリの一番上で実行）
 ```sh
@@ -27,6 +32,8 @@ Java（Spring Boot）で作るサーバー側のプログラムです。3つの�
 ./gradlew :backend:domain:test      # domain のテストだけ実行
 ./gradlew :backend:app:bootRun      # アプリを起動（http://localhost:8080）
 ./gradlew :backend:app:bootRun --args='--spring.profiles.active=demo'  # サンプルデータ入りで起動
+./gradlew :backend:infra:runDynamoDbLocal   # DynamoDB Local を起動（ポート8000。データは .local/dynamodb に残る）
+./gradlew :backend:app:bootRun --args='--spring.profiles.active=local,demo'  # DynamoDB Local に保存して起動
 ```
 `./gradlew` は「Gradleラッパー」で、決められたバージョンのGradleを自動で用意して実行します。自分でGradleを入れる必要はありません。
 

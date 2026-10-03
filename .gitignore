@@ -19,3 +19,5 @@ backend.exited
 .local/
 # テストで DynamoDB Local が作るファイル
 dynamodb-local-metadata.json
+dynamodb.log
+dynamodb.exited
