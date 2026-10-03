@@ -262,7 +262,7 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
      * 応募本体と回答IDの控えは、トランザクションで一緒に消す。片方だけ残ると、
      * 控えだけが残った回答をあとで再送したときに、ずっと「登録済み」扱いで断られてしまうため。
      *
-     * <p>TODO(段階6): 抽選記録の中の応募IDの置き換え（「削除済み」にする）も行う。
+     * <p>TODO(段階9): 抽選記録の中の応募IDの置き換え（「削除済み」にする）も行う。
      */
     @Override
     public void deleteByXId(XId xId) {
@@ -418,7 +418,6 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
         item.put("type", s("HISTORY"));
         item.put("id", s(entry.id()));
         item.put("at", s(entry.at().toString()));
-        item.put("actor", s(entry.actor()));
         item.put("kind", s(entry.kind().code()));
         item.put("from", s(entry.from()));
         item.put("to", s(entry.to()));
@@ -430,7 +429,6 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
         return new HistoryEntry(
                 getS(item, "id"),
                 Instant.parse(getS(item, "at")),
-                getS(item, "actor"),
                 HistoryEntry.Kind.fromCode(getS(item, "kind")),
                 getS(item, "from"),
                 getS(item, "to"),

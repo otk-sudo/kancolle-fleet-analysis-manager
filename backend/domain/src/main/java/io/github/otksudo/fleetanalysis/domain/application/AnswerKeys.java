@@ -25,7 +25,7 @@ public final class AnswerKeys {
 
     /**
      * 配信用画面に出してよい項目（仕様 7.2）。XのID、課金額、名前の出し方はここに入れない。
-     * TODO(段階7): 設定データで変えられるようにする
+     * TODO(段階9): 設定データで変えられるようにする
      */
     public static final List<String> STREAM_VISIBLE = List.of(
             "startedAt",

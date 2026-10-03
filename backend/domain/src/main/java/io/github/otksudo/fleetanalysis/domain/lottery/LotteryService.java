@@ -41,17 +41,16 @@ public class LotteryService {
      * @param mode           まとめ抽選か、配信中の抽選か
      * @param winners        当選人数（配信中の抽選では常に1）
      * @param includeFlagged 印（重複・条件外）がついていても対象に含める応募ID
-     * @param executedBy     実行した人
      */
-    public LotteryRecord run(LotteryMode mode, int winners, Set<String> includeFlagged, String executedBy) {
+    public LotteryRecord run(LotteryMode mode, int winners, Set<String> includeFlagged) {
         // 応募の変更（ApplicationService）と同じ鍵を使い、2つの抽選や受付・変更が同時に混ざらないようにする。
         // 途中まで変更して記録が残らない、という事態を防ぐため
         synchronized (applications) {
-            return runLocked(mode, winners, includeFlagged, executedBy);
+            return runLocked(mode, winners, includeFlagged);
         }
     }
 
-    private LotteryRecord runLocked(LotteryMode mode, int winners, Set<String> includeFlagged, String executedBy) {
+    private LotteryRecord runLocked(LotteryMode mode, int winners, Set<String> includeFlagged) {
         LotterySettings settings = lotteries.loadSettings().settings();
         if (!settings.enabled()) {
             throw new ConflictException("抽選はオフになっています（設定で変更できます）");
@@ -95,14 +94,14 @@ public class LotteryService {
                 candidate.markWonLottery();
                 candidate.changeStatusBySystem(
                         mode == LotteryMode.LIVE ? ApplicationStatus.ANALYZING : ApplicationStatus.SCHEDULED,
-                        null, now, executedBy, "抽選で当選");
+                        null, now, "抽選で当選");
                 // 「分析予定」の最後尾に並べる（candidates は受付順なので、当選者どうしは受付順になる）
                 lastScheduled += 1000;
                 candidate.changePosition(lastScheduled);
                 changed.put(candidate.id(), candidate);
                 affected.add(candidate.xId());
             } else if (mode == LotteryMode.BULK) {
-                candidate.changeStatusBySystem(ApplicationStatus.LOST, null, now, executedBy, "抽選で落選");
+                candidate.changeStatusBySystem(ApplicationStatus.LOST, null, now, "抽選で落選");
                 changed.put(candidate.id(), candidate);
                 affected.add(candidate.xId());
             }
@@ -111,17 +110,17 @@ public class LotteryService {
         // 抽選でステータスが変わった人の、ほかの応募の印を付け直す（例: 落選した応募の後に送られた応募は「重複」から「再応募」へ）
         ApplicationService.refreshFlags(applications, affected, changed);
 
-        // 抽選記録を先に保存する。応募の保存が途中で失敗しても、記録があれば抽選の取り消し（段階6）で元に戻せるため。
+        // 抽選記録を先に保存する。応募の保存が途中で失敗しても、記録があれば抽選の取り消し（段階8）で元に戻せるため。
         // 逆の順番だと、「落選」になったのに記録がない（取り消せない）応募が残ってしまう
-        LotteryRecord record = new LotteryRecord(UUID.randomUUID().toString(), mode, now, executedBy, seed, recordEntries);
+        LotteryRecord record = new LotteryRecord(UUID.randomUUID().toString(), mode, now, seed, recordEntries);
         lotteries.save(record);
 
         // 抽選の対象者は数百人になることがあり、1回のトランザクション（最大100件）に収まらないため、1件ずつ保存する。
-        // TODO(段階6): 抽選の取り消しを作るときに、全部を確実にそろえる方法（再実行など）を見直す
+        // TODO(段階8): 抽選の取り消しを作るときに、全部を確実にそろえる方法（再実行など）を見直す
         Set<String> candidateIds = candidateIds(candidates);
         for (Application application : changed.values()) {
             saveRetryingOnConflict(application, candidateIds.contains(application.id()) ? winnerIds : null,
-                    mode, now, executedBy);
+                    mode, now);
         }
         return record;
     }
@@ -142,7 +141,7 @@ public class LotteryService {
      * @param winnerIds 抽選の対象者なら当選者のID。印の付け直しだけの応募なら null
      */
     private void saveRetryingOnConflict(
-            Application application, Set<String> winnerIds, LotteryMode mode, Instant now, String executedBy) {
+            Application application, Set<String> winnerIds, LotteryMode mode, Instant now) {
         try {
             applications.save(application);
             return;
@@ -168,10 +167,10 @@ public class LotteryService {
             fresh.markWonLottery();
             fresh.changeStatusBySystem(
                     mode == LotteryMode.LIVE ? ApplicationStatus.ANALYZING : ApplicationStatus.SCHEDULED,
-                    null, now, executedBy, "抽選で当選");
+                    null, now, "抽選で当選");
             fresh.changePosition(application.position());
         } else if (mode == LotteryMode.BULK) {
-            fresh.changeStatusBySystem(ApplicationStatus.LOST, null, now, executedBy, "抽選で落選");
+            fresh.changeStatusBySystem(ApplicationStatus.LOST, null, now, "抽選で落選");
         }
         fresh.replaceFlags(application.flags());
         applications.save(fresh);

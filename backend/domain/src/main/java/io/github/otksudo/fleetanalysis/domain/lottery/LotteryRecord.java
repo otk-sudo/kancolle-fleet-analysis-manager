@@ -9,12 +9,11 @@ import java.util.List;
  * @param id         抽選ID
  * @param mode       抽選のしかた
  * @param executedAt 実行日時
- * @param executedBy 実行した人
  * @param seed       乱数の種。{@link WeightedLottery#draw} に同じ種と対象者を渡すと同じ結果になる
  * @param entries    対象者ごとの結果
  */
 public record LotteryRecord(
-        String id, LotteryMode mode, Instant executedAt, String executedBy, long seed, List<Entry> entries) {
+        String id, LotteryMode mode, Instant executedAt, long seed, List<Entry> entries) {
 
     public LotteryRecord {
         entries = List.copyOf(entries);

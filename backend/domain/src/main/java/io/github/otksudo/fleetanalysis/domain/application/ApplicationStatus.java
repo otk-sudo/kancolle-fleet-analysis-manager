@@ -9,7 +9,7 @@ import java.util.Set;
  * <p>{@code enum}（列挙型）は「決まった値のどれか」を表すJavaの仕組み。文字列で持つより打ち間違いに強い。
  * 各値に、APIで使うコード（英語）と画面に出す名前（日本語）を持たせている。
  *
- * <p>TODO(段階7): 仕様では「ステータスは設定で追加できる」ため、設定データから読む形に置き換える。
+ * <p>TODO(段階9): 仕様では「ステータスは設定で追加できる」ため、設定データから読む形に置き換える。
  */
 public enum ApplicationStatus {
     PENDING("pending", "未着手"),
@@ -64,7 +64,7 @@ public enum ApplicationStatus {
             case ANALYZING -> Set.of(PENDING, SCHEDULED, DONE);
             case DONE -> Set.of(ANALYZING); // 間違えて「分析済み」にしたときに戻せるように
             case SKIPPED -> Set.of(PENDING); // 判断を取り消して未着手に戻す
-            case LOST -> Set.of(); // 抽選の取り消しでだけ外れる（段階6）
+            case LOST -> Set.of(); // 抽選の取り消しでだけ外れる（段階8）
         };
         return allowed.contains(next);
     }

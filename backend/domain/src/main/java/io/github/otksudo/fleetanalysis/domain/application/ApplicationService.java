@@ -224,9 +224,8 @@ public class ApplicationService {
      * {@code changes} の null の項目は変えない。
      *
      * @param expectedVersion 画面で読み込んだときの版
-     * @param actor           変更した人（履歴に残す）
      */
-    public Application update(String id, long expectedVersion, ApplicationChanges changes, String actor) {
+    public Application update(String id, long expectedVersion, ApplicationChanges changes) {
         synchronized (repository) {
             Application application = get(id);
             checkVersion(application, expectedVersion);
@@ -236,12 +235,12 @@ public class ApplicationService {
 
             if (changes.xId() != null) {
                 XId next = XId.parse(changes.xId());
-                application.changeXId(next, now, actor);
+                application.changeXId(next, now);
                 affected.add(next);
             }
             if (changes.status() != null) {
                 ApplicationStatus before = application.status();
-                application.changeStatus(changes.status(), changes.skipReason(), now, actor);
+                application.changeStatus(changes.status(), changes.skipReason(), now);
                 if (before != application.status()) {
                     placeAtEndOfGroup(repository, application);
                 }
@@ -295,7 +294,7 @@ public class ApplicationService {
      * @return 変更後の応募（targets と同じ順）
      */
     public List<Application> bulkChangeStatus(
-            List<VersionedId> targets, ApplicationStatus status, SkipReason skipReason, String actor) {
+            List<VersionedId> targets, ApplicationStatus status, SkipReason skipReason) {
         if (targets.isEmpty()) {
             throw new InvalidValueException("変える応募を選んでください");
         }
@@ -329,7 +328,7 @@ public class ApplicationService {
                 }
                 ApplicationStatus before = application.status();
                 try {
-                    application.changeStatus(status, skipReason, now, actor);
+                    application.changeStatus(status, skipReason, now);
                 } catch (ConflictException e) {
                     problems.add(application.admiralName() + "（" + e.getMessage() + "）");
                     continue;
@@ -399,7 +398,7 @@ public class ApplicationService {
      * @param expectedVersion 残す応募の、画面で読み込んだときの版
      * @return 残した応募（引き継いだあと）
      */
-    public Application keep(String id, long expectedVersion, String actor) {
+    public Application keep(String id, long expectedVersion) {
         synchronized (repository) {
             Application target = get(id);
             checkVersion(target, expectedVersion);
@@ -434,14 +433,14 @@ public class ApplicationService {
                 }
             }
             if (inheritedPosition != null) {
-                target.changeStatusBySystem(ApplicationStatus.SCHEDULED, null, now, actor, "重複の解消（分析予定を引き継ぎ）");
+                target.changeStatusBySystem(ApplicationStatus.SCHEDULED, null, now, "重複の解消（分析予定を引き継ぎ）");
                 target.changePosition(inheritedPosition);
                 if (inheritedWin) {
                     target.markWonLottery();
                 }
             }
             for (Application other : others) {
-                other.changeStatusBySystem(ApplicationStatus.SKIPPED, SkipReason.RESUBMITTED, now, actor, "重複の解消");
+                other.changeStatusBySystem(ApplicationStatus.SKIPPED, SkipReason.RESUBMITTED, now, "重複の解消");
             }
 
             Map<String, Application> changed = new LinkedHashMap<>();
@@ -554,7 +553,7 @@ public class ApplicationService {
 
     /** 削除依頼への対応（仕様 8.1）。 */
     public void deleteApplicant(XId xId) {
-        // TODO(段階6): 抽選記録に残る応募IDを「削除済み」に置き換える（仕様 8.1）
+        // TODO(段階9): 抽選記録に残る応募IDを「削除済み」に置き換える（仕様 8.1）
         synchronized (repository) {
             repository.deleteByXId(xId);
         }
@@ -625,23 +624,22 @@ public class ApplicationService {
      * </ul>
      *
      * @param includePending 「未着手」の人も選ぶか（抽選を使わない設定なら true）
-     * @param actor          操作した人（履歴に残す）
      * @return 進めた後に配信用画面へ出す内容。次の人がいなければ空
      */
-    public Optional<StreamView> advanceStream(boolean includePending, String actor) {
+    public Optional<StreamView> advanceStream(boolean includePending) {
         synchronized (repository) {
             Instant now = clock.instant();
             Map<String, Application> changed = new LinkedHashMap<>();
             Set<XId> affected = new HashSet<>();
             Application current = currentOnStream();
             if (current != null) {
-                current.changeStatusBySystem(ApplicationStatus.DONE, null, now, actor, "次の人へ");
+                current.changeStatusBySystem(ApplicationStatus.DONE, null, now, "次の人へ");
                 changed.put(current.id(), current);
                 affected.add(current.xId());
             }
             Application next = nextInQueue(includePending);
             if (next != null) {
-                next.changeStatusBySystem(ApplicationStatus.ANALYZING, null, now, actor, "次の人へ");
+                next.changeStatusBySystem(ApplicationStatus.ANALYZING, null, now, "次の人へ");
                 changed.put(next.id(), next);
                 affected.add(next.xId());
             }
@@ -671,7 +669,7 @@ public class ApplicationService {
      * 配信用画面の内容（仕様 7.2）。「分析中」の人がいなければ空。
      * 分析中が複数いる場合は、最後に分析中にした人を出す。
      * 比較用の「前回」は、前回分析した応募（仕様 5.5）。
-     * TODO(段階5): 配信用画面に「前回の分析日」も出す（仕様 7.2）。
+     * TODO(段階7): 配信用画面に「前回の分析日」も出す（仕様 7.2）。
      */
     public Optional<StreamView> streamView() {
         Application current = currentOnStream();

@@ -30,7 +30,7 @@ Gradle が自動でダウンロードするので、自分で入れる必要は�
 ```sh
 ./gradlew build                     # コード生成・コンパイル・テストをすべて実行
 ./gradlew :backend:domain:test      # domain のテストだけ実行
-./gradlew :backend:app:bootRun      # アプリを起動（http://localhost:8080）
+./gradlew :backend:app:bootRun      # アプリを起動（http://127.0.0.1:8080。このPCの中からだけ開ける）
 ./gradlew :backend:app:bootRun --args='--spring.profiles.active=demo'  # サンプルデータ入りで起動
 ./gradlew :backend:infra:runDynamoDbLocal   # DynamoDB Local を起動（ポート8000。データは .local/dynamodb に残る）
 ./gradlew :backend:app:bootRun --args='--spring.profiles.active=local,demo'  # DynamoDB Local に保存して起動

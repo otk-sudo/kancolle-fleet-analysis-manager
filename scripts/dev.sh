@@ -47,14 +47,25 @@ if [ "${1:-}" = "db" ]; then
 fi
 
 echo "バックエンドを起動しています（初回は依存ライブラリのダウンロードで数分かかることがあります）..."
+# 画面は Vite の開発サーバー（ポート5173）から開くので、そこからの変更の要求も受け付けるように伝える。
+# バックエンドは、ほかのサイトからの変更を断る（Origin の確認。backend の LocalAccessFilter）ため
+export APP_EXTRA_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+# GitHub Codespaces では、画面のURLが https://<codespace名>-5173.<転送用のドメイン> になるので、それも足す。
+# CODESPACE_NAME などは Codespaces が用意する環境変数（説明のページ:
+# https://docs.github.com/en/codespaces/developing-in-a-codespace/default-environment-variables-for-your-codespace ）。
+# 変数の名前は、作業した環境から公式ページを開けず、まだ確かめていない（未確認）。
+# 名前が違って足せなかったときは、画面から変更すると「ほかのWebサイトからの操作は受け付けません」と出る
+if [ -n "${CODESPACE_NAME:-}" ] && [ -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]; then
+  APP_EXTRA_ORIGINS="$APP_EXTRA_ORIGINS,https://${CODESPACE_NAME}-5173.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+fi
 ./gradlew :backend:app:bootRun --args="--spring.profiles.active=$PROFILES" > backend.log 2>&1 &
 BACKEND_PID=$!
 
 # バックエンドが応答するまで、1秒ごとに確かめる（最大5分）
-# 問い合わせ先はログインしなくても呼べる /dev/users（試しユーザーの一覧）にする。ほかのAPIはログインが必要で、401が返るため
+# バックエンドは 127.0.0.1 でだけ待ち受けるので、localhost ではなく 127.0.0.1 に問い合わせる
 started=false
 for _ in $(seq 1 300); do
-  if curl -fs http://localhost:8080/dev/users > /dev/null; then
+  if curl -fs http://127.0.0.1:8080/applications > /dev/null; then
     echo "バックエンドが起動しました。ログは backend.log にあります"
     started=true
     break

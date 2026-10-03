@@ -2,24 +2,23 @@
 # ${名前:既定値} は「環境変数 名前 があればその値、なければ既定値」という意味。
 
 app:
-  # フォーム（Apps Script）だけが知っている秘密キー。本番では必ず環境変数 FORM_KEY で別の値を渡す。
-  # 既定値は手元での試作用で、知られても困らない値にしている
-  form-key: ${FORM_KEY:dev-form-key}
-  # ログインの方式。cognito = 本番の Cognito（段階4で作る）、dev = 手元で使う仮ログイン（役割を選ぶだけ）。
-  # 何も設定しないときは cognito にする。うっかり仮ログイン（誰でも運営になれる）で本番が動かないようにするため。
-  # 手元で動かすときは demo か local のプロファイル（application-demo.yml / application-local.yml）で dev にしている
-  auth:
-    mode: ${AUTH_MODE:cognito}
-  # 保存先。memory = メモリ（止めると消える。試作・テスト用）、dynamodb = DynamoDB（本番と、手元の DynamoDB Local）
+  # 保存先。memory = メモリ（止めると消える。試作・テスト用）、dynamodb = DynamoDB（手元の DynamoDB Local）。
+  # TODO(段階4): 次のPRで SQLite に変え、DynamoDB を外す
   storage: ${APP_STORAGE:memory}
   # DynamoDB の設定（storage が dynamodb のときだけ使う）
   dynamodb:
     table-name: ${DYNAMODB_TABLE:Main}
     region: ${AWS_REGION:ap-northeast-1}
-    # 接続先。空なら本物の AWS。手元の DynamoDB Local を使うときは application-local.yml で指定する
+    # 接続先。手元の DynamoDB Local を使うときは application-local.yml で指定する
     endpoint: ${DYNAMODB_ENDPOINT:}
-    # テーブルがなければ作るか。本番のテーブルは CDK で作るので false
     create-table: false
+  local-access:
+    # ツール自身のほかに受け付ける Origin（どのサイトの画面から送ったか）。カンマ区切り。
+    # ツールは配信者さんのPCの中だけで使うので、ふだんは空にする（LocalAccessFilter を参照）。
+    # 開発中は、画面を Vite の開発サーバー（ポート5173）から開くので、scripts/dev.sh などで指定する
+    extra-origins: ${APP_EXTRA_ORIGINS:}
 
 server:
+  # 127.0.0.1 は「このPCの中からだけ届く住所」。ほかのPCやインターネットからつながらないようにする（仕様 2章）
+  address: 127.0.0.1
   port: 8080

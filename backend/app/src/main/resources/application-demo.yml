@@ -1,7 +1,0 @@
-# 「demo」プロファイルの設定。scripts/dev.sh（Windows は scripts\dev.cmd）で起動したときに使う。
-# サンプルデータを入れる（DemoDataLoader）ほか、ログインは手元用の仮ログイン（役割を選ぶだけ）にする。
-# 本番では demo プロファイルを使わないので、仮ログインは本番では動かない。
-
-app:
-  auth:
-    mode: dev

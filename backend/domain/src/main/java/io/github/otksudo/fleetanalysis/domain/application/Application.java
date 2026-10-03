@@ -169,14 +169,13 @@ public class Application {
      * @param next       新しいステータス
      * @param skipReason 見送りの理由。「見送り」にするときは必須、それ以外は null
      * @param now        変更した日時
-     * @param actor      変更した人
      */
-    public void changeStatus(ApplicationStatus next, SkipReason skipReason, Instant now, String actor) {
+    public void changeStatus(ApplicationStatus next, SkipReason skipReason, Instant now) {
         if (!status.canChangeTo(next)) {
             throw new ConflictException(
                     "「" + status.label() + "」から「" + next.label() + "」には変更できません");
         }
-        applyStatus(next, skipReason, now, actor, null);
+        applyStatus(next, skipReason, now, null);
     }
 
     /**
@@ -186,11 +185,11 @@ public class Application {
      *
      * @param note どの操作で変わったか（履歴に残す。例: "抽選"）
      */
-    public void changeStatusBySystem(ApplicationStatus next, SkipReason skipReason, Instant now, String actor, String note) {
-        applyStatus(next, skipReason, now, actor, note);
+    public void changeStatusBySystem(ApplicationStatus next, SkipReason skipReason, Instant now, String note) {
+        applyStatus(next, skipReason, now, note);
     }
 
-    private void applyStatus(ApplicationStatus next, SkipReason reason, Instant now, String actor, String note) {
+    private void applyStatus(ApplicationStatus next, SkipReason reason, Instant now, String note) {
         if (next == ApplicationStatus.SKIPPED && reason == null) {
             throw new InvalidValueException("見送りにするときは理由を選んでください");
         }
@@ -205,7 +204,7 @@ public class Application {
             return;
         }
         String detail = reason == null ? null : "見送りの理由: " + reason.label();
-        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now, Objects.requireNonNull(actor, "actor"),
+        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now,
                 HistoryEntry.Kind.STATUS, status.code(), next.code(), joinNotes(note, detail)));
         this.status = next;
         this.skipReason = reason;
@@ -233,11 +232,11 @@ public class Application {
      * XのIDを直す（仕様 5.6）。変更前のIDは履歴に残す。
      * 回答の中のXのIDも同じ値に直す（画面で回答を見たときに食い違わないように）。
      */
-    public void changeXId(XId next, Instant now, String actor) {
+    public void changeXId(XId next, Instant now) {
         if (next.equals(xId)) {
             return;
         }
-        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now, Objects.requireNonNull(actor, "actor"),
+        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now,
                 HistoryEntry.Kind.X_ID, xId.value(), next.value(), null));
         Map<String, Object> newAnswers = new LinkedHashMap<>(answers);
         newAnswers.put(AnswerKeys.X_ID, next.value());
