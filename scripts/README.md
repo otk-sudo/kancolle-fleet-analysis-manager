@@ -10,7 +10,8 @@
 
 データの置き場所は2通りあります。
 - そのまま（`dev.sh` / `dev.cmd`）: データをメモリに置きます。止めると消え、起動のたびにサンプルデータに戻ります
-- `db` をつける（`./scripts/dev.sh db` / `dev-db.cmd`）: データを DynamoDB Local（自分のPCで動く DynamoDB の代わり）に置きます。止めても残り、サンプルデータは最初の1回だけ入ります。データはリポジトリの一番上の `.local/dynamodb` にあり、このフォルダを消すと最初からになります。Apple シリコンの Mac では動きません（backend/README.md）手順の全体は [はじめに](../docs/guide/はじめに.md) の5章を見てください。
+- `db` をつける（`./scripts/dev.sh db` / `dev-db.cmd`）: データを DynamoDB Local（自分のPCで動く DynamoDB の代わり）に置きます。止めても残り、サンプルデータは最初の1回だけ入ります。データはリポジトリの一番上の `.local/dynamodb` にあり、このフォルダを消すと最初からになります。Apple シリコンの Mac では動きません（backend/README.md）。
+手順の全体は [はじめに](../docs/guide/はじめに.md) の5章を見てください。
 
 ## dev.cmd は英数字だけで書く
 

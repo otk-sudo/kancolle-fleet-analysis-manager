@@ -28,8 +28,10 @@ if [ "${1:-}" = "db" ]; then
   ./gradlew :backend:infra:runDynamoDbLocal > dynamodb.log 2>&1 &
   DYNAMODB_PID=$!
   # ポート8000に接続できるまで待つ（DynamoDB Local は中身のない問い合わせにエラーを返すので、-f は付けない）
+  db_started=false
   for _ in $(seq 1 300); do
     if curl -s -o /dev/null http://localhost:8000; then
+      db_started=true
       break
     fi
     if ! kill -0 "$DYNAMODB_PID" 2>/dev/null; then
@@ -38,6 +40,10 @@ if [ "${1:-}" = "db" ]; then
     fi
     sleep 1
   done
+  if [ "$db_started" != true ]; then
+    echo "5分待っても DynamoDB Local が応答しませんでした。dynamodb.log を確認してください" >&2
+    exit 1
+  fi
 fi
 
 echo "バックエンドを起動しています（初回は依存ライブラリのダウンロードで数分かかることがあります）..."

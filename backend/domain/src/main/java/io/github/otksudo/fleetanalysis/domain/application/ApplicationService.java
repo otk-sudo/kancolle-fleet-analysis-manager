@@ -64,6 +64,12 @@ public class ApplicationService {
         }
 
         Map<String, Object> answers = command.answers();
+        // 項目コードが空の回答は保存できない（DynamoDB は空の名前を受け付けない）ので、入力の誤りとして断る
+        for (String key : answers.keySet()) {
+            if (key == null || key.isBlank()) {
+                throw new InvalidValueException("回答の項目コードが空です");
+            }
+        }
         XId xId = XId.parse(requiredText(answers, AnswerKeys.X_ID));
         String admiralName = requiredText(answers, AnswerKeys.ADMIRAL_NAME);
         String simulatorUrl = requiredUrl(answers, AnswerKeys.SIMULATOR_URL);

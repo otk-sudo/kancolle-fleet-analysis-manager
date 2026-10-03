@@ -39,8 +39,13 @@ if errorlevel 1 (
 )
 
 rem --- [2] Stop a backend left over from the previous run ---
+rem (port 8080 = backend, port 8000 = DynamoDB Local in db mode)
+set LEFTOVER=0
 curl.exe -fs -o nul http://localhost:8080/applications
-if not errorlevel 1 (
+if not errorlevel 1 set LEFTOVER=1
+curl.exe -s -o nul http://localhost:8000
+if not errorlevel 1 set LEFTOVER=1
+if "%LEFTOVER%"=="1" (
   echo Stopping the backend left over from the previous run...
   call gradlew.bat --stop >nul 2>nul
   timeout /t 3 /nobreak >nul

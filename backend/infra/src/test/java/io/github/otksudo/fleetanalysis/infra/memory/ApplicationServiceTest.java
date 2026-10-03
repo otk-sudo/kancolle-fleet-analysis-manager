@@ -204,4 +204,15 @@ class ApplicationServiceTest {
 
         assertThat(service.advanceStream(true)).map(StreamView::applicationId).contains(duplicate.id());
     }
+
+    @Test
+    void 項目コードが空の回答は入力の誤りとして断る() {
+        Map<String, Object> answers = new java.util.HashMap<>(Map.of(
+                "xId", "@Alpha", "admiralName", "提督", "simulatorUrl", "https://example.com/x"));
+        answers.put("", "値");
+        assertThatThrownBy(() -> service.submit(
+                new IntakeCommand("s1", Instant.parse("2026-10-01T10:00:00Z"), "2026-10", answers)))
+                .isInstanceOf(io.github.otksudo.fleetanalysis.domain.InvalidValueException.class);
+        assertThat(repository.findAll()).isEmpty();
+    }
 }

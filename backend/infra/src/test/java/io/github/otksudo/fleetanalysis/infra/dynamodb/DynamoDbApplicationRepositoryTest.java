@@ -69,6 +69,33 @@ class DynamoDbApplicationRepositoryTest {
     }
 
     @Test
+    void 回答の数は整数ならLong_小数や大きすぎる数ならDoubleで読み戻せる() {
+        Application application = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
+        Map<String, Object> answers = new LinkedHashMap<>(application.answers());
+        answers.put("count", 3L);
+        answers.put("ratio", 1.5);
+        answers.put("huge", 1e21);
+        repository.save(new Application("a1", "s1", XId.parse("@Alpha"), "提督", false, "https://example.com/",
+                "2026-10", answers, Instant.parse("2026-10-01T10:00:00Z"), List.of()));
+
+        Map<String, Object> loaded = repository.findById("a1").orElseThrow().answers();
+        assertThat(loaded.get("count")).isEqualTo(3L);
+        assertThat(loaded.get("ratio")).isEqualTo(1.5);
+        assertThat(loaded.get("huge")).isEqualTo(1e21);
+    }
+
+    @Test
+    void 一覧は保存した最新の内容を返す() {
+        Application application = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
+        repository.save(application);
+        application.changeStatus(ApplicationStatus.SKIPPED, Instant.parse("2026-10-02T00:00:00Z"));
+        repository.save(application);
+        assertThat(repository.findAll()).extracting(Application::status).containsExactly(ApplicationStatus.SKIPPED);
+        assertThat(repository.findByXId(XId.parse("@alpha"))).extracting(Application::status)
+                .containsExactly(ApplicationStatus.SKIPPED);
+    }
+
+    @Test
     void 回答IDとXのIDで探せる() {
         repository.save(newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z"));
         repository.save(newApplication("a2", "s2", "@alpha", "2026-10-01T11:00:00Z"));

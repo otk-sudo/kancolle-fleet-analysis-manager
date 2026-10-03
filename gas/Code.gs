@@ -44,7 +44,7 @@ function onFormSubmit(e) {
   var result = send_(e.response);
   if (!result.ok) {
     console.error('応募の連携に失敗しました: ' + e.response.getId() + ' ' + result.reason);
-    markUnsynced_(e.response, result.reason);
+    markUnsynced_(e.response, result.reason, result.permanent);
   }
 }
 
@@ -54,6 +54,7 @@ function onOpen() {
     .createMenu('応募ツール連携')
     .addItem('未連携を確認', 'showUnsynced')
     .addItem('未連携を再送', 'resendUnsynced')
+    .addItem('再送しても届かない回答を一覧から外す', 'removePermanentFailures')
     .addToUi();
 }
 
@@ -67,7 +68,8 @@ function showUnsynced() {
   }
   var lines = ids.map(function (id) {
     var item = unsynced[id];
-    return '・' + item.submittedAt + '（' + item.reason + '）';
+    var mark = item.permanent ? '【再送しても届きません】' : '';
+    return '・' + mark + item.submittedAt + '（' + item.reason + '）';
   });
   FormApp.getUi().alert('未連携の回答: ' + ids.length + '件\n\n' + lines.join('\n'));
 }
@@ -75,25 +77,34 @@ function showUnsynced() {
 /**
  * メニュー「未連携を再送」: 送れなかった回答を、もう一度送る。
  * 時間主導型トリガー（例: 1時間ごと）に設定すれば、自動で再送させることもできる。
+ * 「再送しても届かない」と分かった回答（入力の誤りなど）は送らない。
  */
 function resendUnsynced() {
   var form = FormApp.getActiveForm();
-  var ids = Object.keys(loadUnsynced_());
+  var unsynced = loadUnsynced_();
   var sent = 0;
   var failed = 0;
-  ids.forEach(function (id) {
-    var response = form.getResponse(id);
-    if (!response) {
-      // フォーム側で回答が消されていたら、もう送れないので一覧から外す
-      removeUnsynced_(id);
+  Object.keys(unsynced).forEach(function (id) {
+    if (unsynced[id].permanent) {
       return;
     }
-    var result = send_(response);
-    if (result.ok) {
-      removeUnsynced_(id);
-      sent++;
-    } else {
-      markUnsynced_(response, result.reason);
+    // 1件でエラーが起きても、残りの再送は続ける（try/catch で1件ずつ受け止める）
+    try {
+      var response = form.getResponse(id);
+      var result = send_(response);
+      if (result.ok) {
+        removeUnsynced_(id);
+        sent++;
+      } else {
+        markUnsynced_(response, result.reason, result.permanent);
+        failed++;
+      }
+    } catch (error) {
+      // フォーム側で回答が消されている、など。理由を残して次へ進む
+      console.error('再送できませんでした: ' + id + ' ' + error);
+      unsynced[id].reason = '再送できませんでした: ' + error;
+      unsynced[id].lastTriedAt = new Date().toISOString();
+      saveUnsynced_(id, unsynced[id]);
       failed++;
     }
   });
@@ -108,8 +119,36 @@ function resendUnsynced() {
 }
 
 /**
+ * メニュー「再送しても届かない回答を一覧から外す」。
+ * 入力の誤り（HTTP 400 など）で断られた回答は、何度送っても届かない。
+ * フォームの回答を確かめ、応募者に連絡するなどしたあとで、一覧から外す。フォームの回答そのものは消えない。
+ * フォーム側で消された回答（再送の理由が「再送できませんでした」のもの）もここで外せる。
+ */
+function removePermanentFailures() {
+  var ui = FormApp.getUi();
+  var unsynced = loadUnsynced_();
+  var ids = Object.keys(unsynced).filter(function (id) {
+    return unsynced[id].permanent || String(unsynced[id].reason).indexOf('再送できませんでした') === 0;
+  });
+  if (ids.length === 0) {
+    ui.alert('再送しても届かない回答はありません。');
+    return;
+  }
+  var answer = ui.alert(
+    ids.length + '件を未連携の一覧から外します。フォームの回答そのものは消えません。よろしいですか？',
+    ui.ButtonSet.YES_NO);
+  if (answer !== ui.Button.YES) {
+    return;
+  }
+  ids.forEach(function (id) {
+    removeUnsynced_(id);
+  });
+  ui.alert(ids.length + '件を一覧から外しました。');
+}
+
+/**
  * 回答1件を応募受付APIへ送る。
- * @return {{ok: boolean, reason: string}} 送れたか、と送れなかった理由
+ * @return {{ok: boolean, reason: string, permanent: boolean}} 送れたか、送れなかった理由、再送しても届かないか
  */
 function send_(response) {
   var props = PropertiesService.getScriptProperties();
@@ -141,11 +180,14 @@ function send_(response) {
     var code = result.getResponseCode();
     // 201 = 受付完了（同じ回答の再送も、受付済みとして201が返る）
     if (code === 201) {
-      return { ok: true, reason: '' };
+      return { ok: true, reason: '', permanent: false };
     }
-    return { ok: false, reason: 'HTTP ' + code + ' ' + result.getContentText().slice(0, 200) };
+    // 400（入力の誤り）と 409（同じ回答IDの食い違い）は、何度送っても結果が変わらない。
+    // 403（秘密キーが違う）、429（混雑）、5xx（ツール側の不調）は、直ったあとに送れば届く
+    var permanent = code === 400 || code === 409;
+    return { ok: false, reason: 'HTTP ' + code + ' ' + result.getContentText().slice(0, 200), permanent: permanent };
   } catch (error) {
-    return { ok: false, reason: '通信エラー: ' + error };
+    return { ok: false, reason: '通信エラー: ' + error, permanent: false };
   }
 }
 
@@ -166,12 +208,17 @@ function loadUnsynced_() {
   return unsynced;
 }
 
-function markUnsynced_(response, reason) {
-  PropertiesService.getScriptProperties().setProperty(UNSYNCED_PREFIX + response.getId(), JSON.stringify({
+function markUnsynced_(response, reason, permanent) {
+  saveUnsynced_(response.getId(), {
     submittedAt: response.getTimestamp().toISOString(),
     reason: reason,
+    permanent: Boolean(permanent),
     lastTriedAt: new Date().toISOString(),
-  }));
+  });
+}
+
+function saveUnsynced_(id, item) {
+  PropertiesService.getScriptProperties().setProperty(UNSYNCED_PREFIX + id, JSON.stringify(item));
 }
 
 function removeUnsynced_(id) {

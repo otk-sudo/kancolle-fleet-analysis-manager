@@ -1,5 +1,6 @@
 package io.github.otksudo.fleetanalysis.infra.dynamodb;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -116,9 +117,7 @@ final class AttributeValues {
             case S -> value.s();
             case BOOL -> value.bool();
             case NUL -> null;
-            case N -> value.n().contains(".") || value.n().contains("E") || value.n().contains("e")
-                    ? (Object) Double.parseDouble(value.n())
-                    : (Object) Long.parseLong(value.n());
+            case N -> toNumber(value.n());
             case L -> {
                 List<Object> list = new ArrayList<>();
                 for (AttributeValue element : value.l()) {
@@ -129,6 +128,22 @@ final class AttributeValues {
             case M -> toObjectMap(value.m());
             default -> throw new IllegalArgumentException("読み込めない型の値です: " + value.type());
         };
+    }
+
+    /**
+     * DynamoDB の数を Java の数に戻す。整数で long に収まれば Long、そうでなければ Double にする。
+     *
+     * <p>DynamoDB は数の前後の0を取り除いて保存するので（公式:
+     * https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.NamingRulesDataTypes.html ）、
+     * 1.0 が "1" で返ってくることもある。見た目では整数か小数か決められないので、値で判断する。
+     */
+    private static Object toNumber(String text) {
+        BigDecimal number = new BigDecimal(text);
+        try {
+            return number.longValueExact(); // 小数部分がある、または long に収まらないと例外
+        } catch (ArithmeticException e) {
+            return number.doubleValue();
+        }
     }
 
     static Map<String, Object> toObjectMap(Map<String, AttributeValue> values) {
