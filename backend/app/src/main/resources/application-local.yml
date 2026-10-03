@@ -3,6 +3,9 @@
 # データは止めても残る（リポジトリの一番上の .local/dynamodb に保存される）。
 
 app:
+  # 手元なので、仮ログイン（役割を選ぶだけ）を使う
+  auth:
+    mode: dev
   storage: dynamodb
   dynamodb:
     table-name: Main

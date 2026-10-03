@@ -27,3 +27,10 @@ export function errorMessage(error: unknown): string {
 export function isConflict(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'conflict'
 }
+
+// ログインと権限（段階3）
+export type Me = Schemas['Me']
+export type Role = Schemas['Role']
+export type Permission = Schemas['Permission']
+export type DevUser = Schemas['DevUser']
+export type StreamOperator = Schemas['StreamOperator']

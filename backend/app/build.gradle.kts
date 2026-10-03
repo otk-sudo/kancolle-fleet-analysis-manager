@@ -60,6 +60,9 @@ dependencies {
     // Spring Boot 4 で spring-boot-starter-web から名前が変わった
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
     implementation("org.springframework.boot:spring-boot-starter-validation") // 入力値チェック（@NotNull など）
+    // ログインの確認（Spring Security）と、トークン（JWT）の署名の確認・作成。
+    // Spring Boot 4 で spring-boot-starter-oauth2-resource-server から名前が変わった（古い名前は非推奨）
+    implementation("org.springframework.boot:spring-boot-starter-security-oauth2-resource-server")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test") // Spring用のテスト一式
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test") // APIのテスト（MockMvc など）

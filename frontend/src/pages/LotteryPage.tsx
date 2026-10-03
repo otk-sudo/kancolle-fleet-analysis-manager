@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { fetchAllApplications } from '../api/applications'
 import { api } from '../api/client'
 import { errorMessage, type Application, type Lottery } from '../api/types'
+import { useAuth } from '../auth/useAuth'
 import { useConfirm } from '../components/useConfirm'
 import FlagBadges from '../components/FlagBadges'
 import Notice from '../components/Notice'
@@ -34,6 +35,9 @@ function LotteryPage() {
   const [loadError, setLoadError] = useState('')
   const [runError, setRunError] = useState('')
   const [dialog, confirm] = useConfirm()
+  const { can } = useAuth()
+  // まとめ抽選をしてよい人か（配信者・運営）。関係者は、対象と記録を見るだけ
+  const canRun = can('bulkLottery')
 
   const load = useCallback(async (): Promise<{ loaded?: Loaded; error?: unknown }> => {
     const [settingsResponse, lotteriesResponse, applicationsResponse] = await Promise.all([
@@ -179,9 +183,11 @@ function LotteryPage() {
           {loaded.lossBonusEnabled
             ? `落選補正あり（当たりやすさ ＝ 1 ＋ 落選回数 × ${loaded.lossBonusStrength}）`
             : '落選補正なし（全員が同じ当たりやすさ）'}
-          <Link to="/settings" className="settings-link">
-            設定を変える
-          </Link>
+          {can('editSettings') && (
+            <Link to="/settings" className="settings-link">
+              設定を変える
+            </Link>
+          )}
         </p>
       </div>
 
@@ -197,7 +203,11 @@ function LotteryPage() {
       )}
       {message && <Notice kind="ok" title={message} />}
       {!loaded.lotteryEnabled && (
-        <Notice kind="info" title="抽選はオフになっています" action={<Link to="/settings">設定を開く</Link>}>
+        <Notice
+          kind="info"
+          title="抽選はオフになっています"
+          action={can('editSettings') && <Link to="/settings">設定を開く</Link>}
+        >
           抽選するときは、設定で「抽選を使う」をオンにしてください。
         </Notice>
       )}
@@ -242,7 +252,7 @@ function LotteryPage() {
                             type="checkbox"
                             aria-label={`${application.admiralName} 提督を抽選の対象に含める`}
                             checked={included}
-                            disabled={!flagged}
+                            disabled={!flagged || !canRun}
                             onChange={() => toggle(application.id)}
                           />
                         </label>
@@ -270,34 +280,41 @@ function LotteryPage() {
         </section>
 
         <aside className="side-column">
-          <section className="card compact">
-            <h2 className="card-title">まとめ抽選</h2>
-            <div className="field">
-              <label htmlFor="winners">当選人数</label>
-              <div className="row">
-                <input
-                  id="winners"
-                  type="number"
-                  min={1}
-                  max={Math.max(targetCount, 1)}
-                  value={winners}
-                  onChange={(e) => setWinners(Number(e.target.value))}
-                  className="number-input"
-                />
-                <span>人 ／ 対象 {targetCount}人</span>
+          {canRun ? (
+            <section className="card compact">
+              <h2 className="card-title">まとめ抽選</h2>
+              <div className="field">
+                <label htmlFor="winners">当選人数</label>
+                <div className="row">
+                  <input
+                    id="winners"
+                    type="number"
+                    min={1}
+                    max={Math.max(targetCount, 1)}
+                    value={winners}
+                    onChange={(e) => setWinners(Number(e.target.value))}
+                    className="number-input"
+                  />
+                  <span>人 ／ 対象 {targetCount}人</span>
+                </div>
+                {tooMany && <span className="field-help error">当選人数は、対象の人数（{targetCount}人）以下にしてください。</span>}
               </div>
-              {tooMany && <span className="field-help error">当選人数は、対象の人数（{targetCount}人）以下にしてください。</span>}
-            </div>
-            <button
-              type="button"
-              className="button primary"
-              disabled={!loaded.lotteryEnabled || targetCount === 0 || winners < 1 || tooMany}
-              onClick={() => void runBulk()}
-            >
-              抽選の内容を確認する
-            </button>
-            <span className="field-help">次に出る確認で、内容を確かめてから抽選します。</span>
-          </section>
+              <button
+                type="button"
+                className="button primary"
+                disabled={!loaded.lotteryEnabled || targetCount === 0 || winners < 1 || tooMany}
+                onClick={() => void runBulk()}
+              >
+                抽選の内容を確認する
+              </button>
+              <span className="field-help">次に出る確認で、内容を確かめてから抽選します。</span>
+            </section>
+          ) : (
+            <section className="card compact">
+              <h2 className="card-title">まとめ抽選</h2>
+              <p className="card-note">まとめ抽選は、配信者と運営だけが行えます。</p>
+            </section>
+          )}
 
           <section className="card compact">
             <h2 className="card-title">これまでの抽選</h2>

@@ -1,8 +1,10 @@
 package io.github.otksudo.fleetanalysis.infra.dynamodb;
 
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
+import io.github.otksudo.fleetanalysis.domain.auth.StreamOperatorRepository;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRepository;
 import java.net.URI;
+import java.time.Clock;
 import java.util.Objects;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -21,6 +23,7 @@ public final class DynamoDbStorage implements AutoCloseable {
     private final DynamoDbClient client;
     private final ApplicationRepository applications;
     private final LotteryRepository lotteries;
+    private final StreamOperatorRepository streamOperators;
 
     /**
      * 接続の設定。
@@ -42,6 +45,7 @@ public final class DynamoDbStorage implements AutoCloseable {
         this.client = client;
         this.applications = new DynamoDbApplicationRepository(client, tableName);
         this.lotteries = new DynamoDbLotteryRepository(client, tableName);
+        this.streamOperators = new DynamoDbStreamOperatorRepository(client, tableName, Clock.systemUTC());
     }
 
     /** 設定にしたがって DynamoDB につなぐ。 */
@@ -66,6 +70,10 @@ public final class DynamoDbStorage implements AutoCloseable {
 
     public LotteryRepository lotteries() {
         return lotteries;
+    }
+
+    public StreamOperatorRepository streamOperators() {
+        return streamOperators;
     }
 
     @Override

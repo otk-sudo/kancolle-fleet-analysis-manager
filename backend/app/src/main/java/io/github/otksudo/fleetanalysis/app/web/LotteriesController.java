@@ -15,19 +15,25 @@ import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
+import io.github.otksudo.fleetanalysis.app.security.CurrentUsers;
+import io.github.otksudo.fleetanalysis.domain.auth.CurrentUser;
+import io.github.otksudo.fleetanalysis.domain.auth.Permission;
 
 /** 抽選の実行と記録のAPI（仕様 6章）。 */
 @RestController
 public class LotteriesController implements LotteriesApi {
 
     private final LotteryService lotteryService;
+    private final CurrentUsers users;
 
-    public LotteriesController(LotteryService lotteryService) {
+    public LotteriesController(LotteryService lotteryService, CurrentUsers users) {
         this.lotteryService = lotteryService;
+        this.users = users;
     }
 
     @Override
     public ResponseEntity<ListLotteries200Response> listLotteries(String cursor, Integer limit) {
+        users.require(Permission.VIEW);
         // 試作では抽選記録は少ないので、ページ分けせず新しい順に limit 件まで返す
         List<Lottery> items = new ArrayList<>();
         for (LotteryRecord record : lotteryService.history()) {
@@ -42,6 +48,8 @@ public class LotteriesController implements LotteriesApi {
     @Override
     public ResponseEntity<Lottery> runLottery(LotteryRequest request) {
         LotteryMode mode = LotteryMode.fromCode(request.getMode().getValue());
+        // まとめ抽選は配信者・運営だけ。配信中の抽選は「配信の操作」なので、許可された関係者もできる（仕様 2章、7.3）
+        CurrentUser user = users.require(mode == LotteryMode.BULK ? Permission.BULK_LOTTERY : Permission.STREAM_OPERATION);
         int winners = 1;
         if (mode == LotteryMode.BULK) {
             if (request.getWinners() == null) {
@@ -54,7 +62,7 @@ public class LotteriesController implements LotteriesApi {
         if (request.getIncludeFlagged() != null) {
             includeFlagged.addAll(request.getIncludeFlagged());
         }
-        LotteryRecord record = lotteryService.run(mode, winners, includeFlagged, Actors.current());
+        LotteryRecord record = lotteryService.run(mode, winners, includeFlagged, user.displayName());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiMapper.toApi(record));
     }
 }

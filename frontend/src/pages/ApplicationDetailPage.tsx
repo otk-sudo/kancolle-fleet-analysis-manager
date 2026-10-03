@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { api } from '../api/client'
 import { errorMessage, isConflict, type Application, type HistoryEntry, type SkipReason } from '../api/types'
 import AnswerTable from '../components/AnswerTable'
+import { useAuth } from '../auth/useAuth'
 import { useConfirm } from '../components/useConfirm'
 import FlagBadges from '../components/FlagBadges'
 import Notice from '../components/Notice'
@@ -13,6 +14,7 @@ import {
   STATUS_LABELS,
   formatDateTime,
   formatLongDate,
+  formatShortDate,
   formatShortDateTime,
 } from '../labels'
 
@@ -61,6 +63,8 @@ function ApplicationDetailPage() {
   const [message, setMessage] = useState('')
   const [failure, setFailure] = useState<Failure | null>(null)
   const [dialog, confirm] = useConfirm()
+  // 応募を変えてよい人か（関係者は見るだけ）。変えられない人には、操作のカードを出さない
+  const canEdit = useAuth().can('editApplications')
 
   /** APIから応募・同じ人の応募・変更履歴を読み込む（画面にはまだ反映しない） */
   const load = useCallback(async (): Promise<{ loaded?: Loaded; error?: unknown }> => {
@@ -367,7 +371,7 @@ function ApplicationDetailPage() {
         </div>
 
         <aside aria-label="この応募の操作" className="side-column">
-          {canKeep && (
+          {canEdit && canKeep && (
             <section className="card compact warn">
               <h2 className="card-title">重複の解消</h2>
               <p className="card-note">
@@ -380,90 +384,103 @@ function ApplicationDetailPage() {
             </section>
           )}
 
-          <section className="card compact">
-            <h2 className="card-title">ステータスと配信日</h2>
-            <div className="field">
-              <label htmlFor="status">ステータス</label>
-              <select id="status" value={nextStatus} onChange={(e) => setNextStatus(e.target.value)}>
-                {statusChoices.map((code) => (
-                  <option key={code} value={code}>
-                    {STATUS_LABELS[code]}
-                  </option>
-                ))}
-              </select>
-              <span className="field-help">
-                {application.status === 'lost'
-                  ? '「落選」は抽選でだけ付き、手では変えられません。'
-                  : 'いまのステータスから変えられるものだけを出しています。'}
-              </span>
-            </div>
-            {nextStatus === 'skipped' && (
-              <div className="field">
-                <label htmlFor="skip-reason">見送りの理由</label>
-                <select
-                  id="skip-reason"
-                  value={skipReason}
-                  onChange={(e) => setSkipReason(e.target.value as SkipReason | '')}
-                >
-                  <option value="">選んでください</option>
-                  {Object.entries(SKIP_REASON_LABELS).map(([code, label]) => (
-                    <option key={code} value={code}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="field">
-              <label htmlFor="stream-date">配信日（なくてもかまいません）</label>
-              <div className="row">
-                <input id="stream-date" type="date" value={streamDate} onChange={(e) => setStreamDate(e.target.value)} />
-                {streamDate && (
-                  <button type="button" className="link-button" onClick={() => setStreamDate('')}>
-                    配信日を消す
-                  </button>
+          {canEdit ? (
+            <>
+              <section className="card compact">
+                <h2 className="card-title">ステータスと配信日</h2>
+                <div className="field">
+                  <label htmlFor="status">ステータス</label>
+                  <select id="status" value={nextStatus} onChange={(e) => setNextStatus(e.target.value)}>
+                    {statusChoices.map((code) => (
+                      <option key={code} value={code}>
+                        {STATUS_LABELS[code]}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="field-help">
+                    {application.status === 'lost'
+                      ? '「落選」は抽選でだけ付き、手では変えられません。'
+                      : 'いまのステータスから変えられるものだけを出しています。'}
+                  </span>
+                </div>
+                {nextStatus === 'skipped' && (
+                  <div className="field">
+                    <label htmlFor="skip-reason">見送りの理由</label>
+                    <select
+                      id="skip-reason"
+                      value={skipReason}
+                      onChange={(e) => setSkipReason(e.target.value as SkipReason | '')}
+                    >
+                      <option value="">選んでください</option>
+                      {Object.entries(SKIP_REASON_LABELS).map(([code, label]) => (
+                        <option key={code} value={code}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
-              </div>
-            </div>
-            {showAnalysis && (
-              <div className="inset">
-                <span className="small label-color">分析済みにするときは、次に同じ人を分析するときのために残しておけます。</span>
                 <div className="field">
-                  <label htmlFor="analysis-memo">分析メモ</label>
-                  <textarea
-                    id="analysis-memo"
-                    rows={3}
-                    placeholder="今回の助言の要点"
-                    value={analysisMemo}
-                    onChange={(e) => setAnalysisMemo(e.target.value)}
-                  />
+                  <label htmlFor="stream-date">配信日（なくてもかまいません）</label>
+                  <div className="row">
+                    <input id="stream-date" type="date" value={streamDate} onChange={(e) => setStreamDate(e.target.value)} />
+                    {streamDate && (
+                      <button type="button" className="link-button" onClick={() => setStreamDate('')}>
+                        配信日を消す
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="field">
-                  <label htmlFor="archive-url">配信アーカイブのURL（時刻付きも可）</label>
-                  <input
-                    id="archive-url"
-                    type="url"
-                    placeholder="https://"
-                    value={archiveUrl}
-                    onChange={(e) => setArchiveUrl(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-            <button type="button" className="button primary" onClick={() => void saveStatus()}>
-              変更を保存する
-            </button>
-          </section>
+                {showAnalysis && (
+                  <div className="inset">
+                    <span className="small label-color">分析済みにするときは、次に同じ人を分析するときのために残しておけます。</span>
+                    <div className="field">
+                      <label htmlFor="analysis-memo">分析メモ</label>
+                      <textarea
+                        id="analysis-memo"
+                        rows={3}
+                        placeholder="今回の助言の要点"
+                        value={analysisMemo}
+                        onChange={(e) => setAnalysisMemo(e.target.value)}
+                      />
+                    </div>
+                    <div className="field">
+                      <label htmlFor="archive-url">配信アーカイブのURL（時刻付きも可）</label>
+                      <input
+                        id="archive-url"
+                        type="url"
+                        placeholder="https://"
+                        value={archiveUrl}
+                        onChange={(e) => setArchiveUrl(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+                <button type="button" className="button primary" onClick={() => void saveStatus()}>
+                  変更を保存する
+                </button>
+              </section>
 
-          <section className="card compact">
-            <label htmlFor="memo" className="card-title">
-              メモ
-            </label>
-            <textarea id="memo" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
-            <button type="button" className="button start" onClick={() => void saveMemo()}>
-              メモを保存する
-            </button>
-          </section>
+              <section className="card compact">
+                <label htmlFor="memo" className="card-title">
+                  メモ
+                </label>
+                <textarea id="memo" rows={3} value={memo} onChange={(e) => setMemo(e.target.value)} />
+                <button type="button" className="button start" onClick={() => void saveMemo()}>
+                  メモを保存する
+                </button>
+              </section>
+            </>
+          ) : (
+            // 見るだけの人（関係者）には、配信日とメモを文字で見せる（ステータスは上に出ている）
+            <section className="card compact">
+              <h2 className="card-title">配信日とメモ</h2>
+              <p className="card-note">
+                配信日: {application.streamDate ? formatShortDate(application.streamDate) : 'まだ決まっていません'}
+              </p>
+              <p className="card-note pre">{application.memo ? application.memo : 'メモはありません。'}</p>
+            </section>
+          )}
 
           {others.length > 0 && (
             <section className="card compact">
@@ -499,25 +516,27 @@ function ApplicationDetailPage() {
             )}
           </section>
 
-          <details className="more">
-            <summary>ほかの操作（XのIDを直す）</summary>
-            <div className="field more-body">
-              <label htmlFor="x-id">正しいXのID</label>
-              <div className="row">
-                <input id="x-id" value={xIdInput} onChange={(e) => setXIdInput(e.target.value)} />
-                <button
-                  type="button"
-                  className="button"
-                  disabled={!xIdInput.trim() || xIdInput.trim().replace(/^@/, '') === application.xId}
-                  onClick={() => void fixXId()}
-                >
-                  XのIDを直す
-                </button>
+          {canEdit && (
+            <details className="more">
+              <summary>ほかの操作（XのIDを直す）</summary>
+              <div className="field more-body">
+                <label htmlFor="x-id">正しいXのID</label>
+                <div className="row">
+                  <input id="x-id" value={xIdInput} onChange={(e) => setXIdInput(e.target.value)} />
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={!xIdInput.trim() || xIdInput.trim().replace(/^@/, '') === application.xId}
+                    onClick={() => void fixXId()}
+                  >
+                    XのIDを直す
+                  </button>
+                </div>
+                <span className="field-help">応募者が打ち間違えたときに使います。直す前のIDは変更の履歴に残ります。</span>
               </div>
-              <span className="field-help">応募者が打ち間違えたときに使います。直す前のIDは変更の履歴に残ります。</span>
-            </div>
-            {/* TODO(段階7): 削除依頼への対応（運営だけ。確認画面と控えの削除手順の表示）をここに足す */}
-          </details>
+              {/* TODO(段階7): 削除依頼への対応（運営だけ。確認画面と控えの削除手順の表示）をここに足す */}
+            </details>
+          )}
         </aside>
       </div>
     </>
