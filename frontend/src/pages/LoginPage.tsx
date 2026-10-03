@@ -41,7 +41,12 @@ function LoginPage() {
       setError(errorMessage(error))
       return
     }
-    saveToken(data.token)
+    try {
+      saveToken(data.token)
+    } catch {
+      setError('ブラウザにログインの情報を保存できませんでした。ブラウザの設定で、このサイトのデータの保存を許可してください')
+      return
+    }
     void navigate(safeNext(searchParams.get('next')), { replace: true })
   }
 
@@ -83,9 +88,11 @@ function LoginPage() {
 /**
  * ログインした後に移る先。URLの next に入っている、元の画面のパスを使う。
  * 「/」で始まるこのサイトの中のパスだけを受け付ける（「//別のサイト」などへ飛ばされないようにするため）。
+ * ブラウザは「\」を「/」と同じに読むことがあるので、「\」を含むものも受け付けない。
  */
 function safeNext(next: string | null): string {
-  if (next && next.startsWith('/') && !next.startsWith('//') && !next.startsWith('/login')) {
+  const insideThisSite = next !== null && next.startsWith('/') && !next.startsWith('//') && !next.includes('\\')
+  if (insideThisSite && !next.startsWith('/login')) {
     return next
   }
   return '/'

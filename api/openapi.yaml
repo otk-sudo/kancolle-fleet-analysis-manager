@@ -35,6 +35,8 @@ paths:
                 $ref: '#/components/schemas/Me'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /dev/users:
     get:
       tags: [devLogin]
@@ -150,6 +152,8 @@ paths:
                 $ref: '#/components/schemas/ApplicationPage'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /applications/{applicationId}:
     parameters:
       - $ref: '#/components/parameters/ApplicationId'
@@ -164,6 +168,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
@@ -188,6 +196,8 @@ paths:
                 $ref: '#/components/schemas/Application'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -210,6 +220,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoryEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
   /applications/{applicationId}/keep:
@@ -237,6 +251,8 @@ paths:
                 $ref: '#/components/schemas/Application'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -266,6 +282,8 @@ paths:
                 $ref: '#/components/schemas/BulkStatusResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -293,6 +311,8 @@ paths:
       responses:
         '204':
           description: 並べ替え完了
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /applicants/{xId}/applications:
@@ -311,6 +331,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Application'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /applicants/{xId}:
     parameters:
       - $ref: '#/components/parameters/XId'
@@ -321,6 +345,8 @@ paths:
       responses:
         '204':
           description: 削除完了
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /stream/current:
@@ -335,6 +361,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /stream/next:
     post:
       tags: [stream]
@@ -352,6 +382,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /stream/operators:
@@ -368,6 +400,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/StreamOperator'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /stream/operators/{userId}:
@@ -384,6 +418,10 @@ paths:
       responses:
         '204':
           description: 許可した
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -395,6 +433,8 @@ paths:
       responses:
         '204':
           description: 取り消した
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /lotteries:
@@ -420,6 +460,10 @@ paths:
                   nextCursor:
                     type: [string, 'null']
                 required: [items, nextCursor]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [lotteries]
       operationId: runLottery
@@ -437,6 +481,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Lottery'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
@@ -464,6 +510,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     put:
       tags: [settings]
       operationId: putSettings
@@ -481,6 +531,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Settings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '409':
@@ -499,6 +551,10 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags: [users]
       operationId: createUser
@@ -526,6 +582,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /users/{userId}:
@@ -542,6 +600,8 @@ paths:
       responses:
         '204':
           description: 削除完了
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
   /imports/csv:
@@ -587,6 +647,10 @@ paths:
                         message:
                           type: string
                 required: [imported, skipped, errors]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 components:
   securitySchemes:
     cognito:
@@ -635,13 +699,13 @@ components:
           schema:
             $ref: '#/components/schemas/ApiError'
     Unauthorized:
-      description: 認証が必要
+      description: 認証が必要（トークンがない・期限切れ・正しくない）
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
     Forbidden:
-      description: 権限がない
+      description: 権限がない（二段階認証をまだ設定していない配信者・運営は、どの操作もこれになる）
       content:
         application/json:
           schema:

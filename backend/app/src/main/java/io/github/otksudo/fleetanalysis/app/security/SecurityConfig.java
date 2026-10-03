@@ -47,6 +47,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/intake/**", "/dev/**").permitAll()
+                        // エラーの応答を作る内部の転送先（/error）。ここにトークンを求めると、ログインのいらないAPI（受付など）で
+                        // サーバーのエラーが起きたときも「ログインしてください」(401)になり、原因がわからなくなるため通す
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 // 「Authorization: Bearer トークン」を受け取り、jwtDecoder で署名と期限を確かめる
                 .oauth2ResourceServer(resourceServer -> resourceServer

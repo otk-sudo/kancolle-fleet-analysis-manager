@@ -1,5 +1,6 @@
 package io.github.otksudo.fleetanalysis.app.web;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
@@ -114,6 +115,9 @@ class AuthApiTest {
         String streamer = login("dev-streamer");
         String staff = login("dev-staff-a");
         mockMvc.perform(post("/stream/next").header("Authorization", staff)).andExpect(status().isForbidden());
+        mockMvc.perform(post("/lotteries").header("Authorization", staff)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mode\": \"live\"}"))
+                .andExpect(status().isForbidden());
 
         mockMvc.perform(put("/stream/operators/dev-staff-a").header("Authorization", streamer))
                 .andExpect(status().isNoContent());
@@ -124,6 +128,10 @@ class AuthApiTest {
                 .andExpect(jsonPath("$.streamOperator").value(true))
                 .andExpect(jsonPath("$.permissions", hasItem("streamOperation")));
         mockMvc.perform(post("/stream/next").header("Authorization", staff)).andExpect(status().isOk());
+        // 配信中の抽選も「配信の操作」なので、権限の確認は通る（抽選がオフなどの理由で断られることはある）
+        mockMvc.perform(post("/lotteries").header("Authorization", staff)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"mode\": \"live\"}"))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(403));
         // 配信の操作の許可は、まとめ抽選には広がらない（仕様 2章）
         mockMvc.perform(post("/lotteries").header("Authorization", staff)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"mode\": \"bulk\", \"winners\": 1}"))

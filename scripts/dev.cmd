@@ -40,8 +40,9 @@ if errorlevel 1 (
 
 rem --- [2] Stop a backend left over from the previous run ---
 rem (port 8080 = backend, port 8000 = DynamoDB Local in db mode)
+rem Any HTTP answer (even 401 or 404) means something is running on 8080, so no -f here
 set LEFTOVER=0
-curl.exe -fs -o nul http://localhost:8080/applications
+curl.exe -s -o nul http://localhost:8080/dev/users
 if not errorlevel 1 set LEFTOVER=1
 curl.exe -s -o nul http://localhost:8000
 if not errorlevel 1 set LEFTOVER=1
@@ -80,9 +81,10 @@ if exist backend.exited del backend.exited 2>nul
 start "" /b cmd /c "call gradlew.bat :backend:app:bootRun --args=--spring.profiles.active=%PROFILES% --console=plain > backend.log 2>&1 & echo exited> backend.exited"
 
 rem --- [4] Wait until the backend answers (max 10 minutes) ---
+rem /dev/users needs no login (other APIs answer 401 without a token)
 set /a tries=0
 :wait
-curl.exe -fs -o nul http://localhost:8080/applications
+curl.exe -fs -o nul http://localhost:8080/dev/users
 if not errorlevel 1 goto :started
 if exist backend.exited goto :backend_failed
 set /a tries+=1

@@ -19,21 +19,48 @@ function RequireLogin() {
   const hasToken = loadToken() !== null
   // undefined = 読み込み中
   const [me, setMe] = useState<Me | undefined>(undefined)
-  const [error, setError] = useState('')
+  // 読み込めなかったときの内容。forbidden は「ログインはできたが、使える役割が付いていない」（403）
+  const [failure, setFailure] = useState<{ message: string; forbidden: boolean } | null>(null)
+
+  // /me を読み直すきっかけ。数字を変えると、下の useEffect がもう一度 /me を読む
+  const [reloadKey, setReloadKey] = useState(0)
+
+  useEffect(() => {
+    // 次のときに、できることが変わっているかもしれないので /me を読み直す
+    // ・このタブに戻ってきたとき（focus）: 配信者が配信の操作を許可した・取り消したときなど
+    // ・ほかのタブでログインし直したとき（storage）: localStorage はタブの間で共有なので、送るトークンが変わっている
+    const reload = () => setReloadKey((key) => key + 1)
+    window.addEventListener('focus', reload)
+    window.addEventListener('storage', reload)
+    return () => {
+      window.removeEventListener('focus', reload)
+      window.removeEventListener('storage', reload)
+    }
+  }, [])
 
   useEffect(() => {
     if (!hasToken) return
     let ignore = false
-    void api.GET('/me').then(({ data, error }) => {
-      if (ignore) return
-      // 401 のときは、client.ts の共通の処理がログイン画面へ移すので、ここではほかの失敗だけ扱う
-      if (data) setMe(data)
-      else setError(errorMessage(error))
-    })
+    api
+      .GET('/me')
+      .then(({ data, error, response }) => {
+        if (ignore) return
+        // 401 のときは、client.ts の共通の処理がログイン画面へ移すので、ここではほかの失敗だけ扱う
+        if (data) {
+          setMe(data)
+          setFailure(null)
+        } else {
+          setFailure({ message: errorMessage(error), forbidden: response.status === 403 })
+        }
+      })
+      // バックエンドが起動していないなど、応答そのものがないとき
+      .catch(() => {
+        if (!ignore) setFailure({ message: errorMessage(undefined), forbidden: false })
+      })
     return () => {
       ignore = true
     }
-  }, [hasToken])
+  }, [hasToken, reloadKey])
 
   // useMemo: me が変わらない限り同じ値を使い回す（毎回新しく作ると、読んでいる画面がすべて描き直されるため）
   const auth = useMemo<Auth | null>(() => {
@@ -53,12 +80,23 @@ function RequireLogin() {
     const next = location.pathname + location.search
     return <Navigate to={`${LOGIN_PATH}?next=${encodeURIComponent(next)}`} replace />
   }
-  if (error) {
+  if (failure) {
     return (
-      <main className="page">
+      <main className="page narrow-page">
         <Notice kind="error" title="ログインしている人の情報を読み込めませんでした">
-          {error}。時間をおいてから、画面を読み込み直してください。
+          {failure.forbidden ? failure.message : `${failure.message}。時間をおいてから、画面を読み込み直してください。`}
         </Notice>
+        {/* 別の人でログインし直せるよう、ここにもログアウトを置く（ヘッダーはまだ出ていないため） */}
+        <button
+          type="button"
+          className="button start"
+          onClick={() => {
+            clearToken()
+            void navigate(LOGIN_PATH)
+          }}
+        >
+          ログアウトする
+        </button>
       </main>
     )
   }

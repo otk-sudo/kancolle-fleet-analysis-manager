@@ -26,16 +26,22 @@ export const LOGIN_PATH = '/login'
  * こうしておけば、各画面でトークンのことを気にせずに api.GET などを書ける。
  */
 const authMiddleware: Middleware = {
-  onRequest({ request }) {
+  onRequest({ request, schemaPath }) {
     const token = loadToken()
-    if (token) {
+    // 仮ログインのAPI（/dev/...）はログインする前に呼ぶので、トークンを付けない。
+    // 古いトークン（期限切れなど）を付けると断られ、ログインし直せなくなるため
+    if (token && !schemaPath.startsWith('/dev/')) {
       request.headers.set('Authorization', `Bearer ${token}`)
     }
     return request
   },
   onResponse({ response }) {
-    if (response.status === 401 && window.location.pathname !== LOGIN_PATH) {
+    if (response.status === 401) {
+      // 使えないトークンは捨てる。ログイン画面にいるときは、移らずにそのまま選び直してもらう
       clearToken()
+      if (window.location.pathname === LOGIN_PATH) {
+        return response
+      }
       // ログインした後に元の画面へ戻れるよう、今のURLを next に入れておく
       const next = window.location.pathname + window.location.search
       window.location.assign(`${LOGIN_PATH}?next=${encodeURIComponent(next)}`)
