@@ -418,7 +418,6 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
         item.put("type", s("HISTORY"));
         item.put("id", s(entry.id()));
         item.put("at", s(entry.at().toString()));
-        item.put("actor", s(entry.actor()));
         item.put("kind", s(entry.kind().code()));
         item.put("from", s(entry.from()));
         item.put("to", s(entry.to()));
@@ -430,7 +429,6 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
         return new HistoryEntry(
                 getS(item, "id"),
                 Instant.parse(getS(item, "at")),
-                getS(item, "actor"),
                 HistoryEntry.Kind.fromCode(getS(item, "kind")),
                 getS(item, "from"),
                 getS(item, "to"),

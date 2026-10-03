@@ -10,8 +10,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
-import io.github.otksudo.fleetanalysis.app.security.CurrentUsers;
-import io.github.otksudo.fleetanalysis.domain.auth.Permission;
 
 /**
  * 設定の取得・変更のAPI（仕様 10章）。
@@ -23,23 +21,19 @@ public class SettingsController implements SettingsApi {
     private static final String LOTTERY = "lottery";
 
     private final LotteryService lotteryService;
-    private final CurrentUsers users;
 
-    public SettingsController(LotteryService lotteryService, CurrentUsers users) {
+    public SettingsController(LotteryService lotteryService) {
         this.lotteryService = lotteryService;
-        this.users = users;
     }
 
     @Override
     public ResponseEntity<Settings> getSettings(String kind) {
-        users.require(Permission.VIEW);
         requireLottery(kind);
         return ResponseEntity.ok(toApi(lotteryService.settings()));
     }
 
     @Override
     public ResponseEntity<Settings> putSettings(String kind, Settings settings) {
-        users.require(Permission.EDIT_SETTINGS);
         requireLottery(kind);
         Map<String, Object> value = settings.getValue();
         LotterySettings newSettings = new LotterySettings(

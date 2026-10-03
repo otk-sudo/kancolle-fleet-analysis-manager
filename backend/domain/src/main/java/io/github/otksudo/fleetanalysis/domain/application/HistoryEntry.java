@@ -11,18 +11,16 @@ import java.util.Objects;
  *
  * @param id     履歴のID（同じ時刻の変更を見分けるため）
  * @param at     変更した日時
- * @param actor  変更した人
  * @param kind   何を変えたか
  * @param from   変更前（ステータスのコード、またはXのID）
  * @param to     変更後
  * @param note   補足（見送りの理由、どの操作で変わったか、など）。なければ null
  */
-public record HistoryEntry(String id, Instant at, String actor, Kind kind, String from, String to, String note) {
+public record HistoryEntry(String id, Instant at, Kind kind, String from, String to, String note) {
 
     public HistoryEntry {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(at, "at");
-        Objects.requireNonNull(actor, "actor");
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(from, "from");
         Objects.requireNonNull(to, "to");

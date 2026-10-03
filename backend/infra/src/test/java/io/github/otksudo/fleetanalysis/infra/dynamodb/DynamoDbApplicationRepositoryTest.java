@@ -225,7 +225,6 @@ class DynamoDbApplicationRepositoryTest {
         assertThat(history.get(2)).satisfies(entry -> {
             assertThat(entry.from()).isEqualTo("analyzing");
             assertThat(entry.to()).isEqualTo("done");
-            assertThat(entry.actor()).isEqualTo("配信者");
             assertThat(entry.note()).isEqualTo("次の人へ");
             assertThat(entry.at()).isEqualTo(Instant.parse("2026-10-02T11:00:00Z"));
         });
