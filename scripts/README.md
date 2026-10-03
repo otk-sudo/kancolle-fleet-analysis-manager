@@ -4,8 +4,14 @@
 |---|---|---|---|
 | `dev.sh` | Mac・Linux・Codespaces | `./scripts/dev.sh` | Ctrl+C |
 | `dev.cmd` | Windows | エクスプローラーでダブルクリック（またはコマンドプロンプトで `scripts\dev.cmd`） | ウィンドウを閉じる |
+| `dev-db.cmd` | Windows | ダブルクリック。`dev.cmd db` と同じ（データを DynamoDB Local に置く） | ウィンドウを閉じる |
 
-どちらも、バックエンド（サンプルデータ入り）と画面をまとめて起動します。手順の全体は [はじめに](../docs/guide/はじめに.md) の5章を見てください。
+どちらも、バックエンド（サンプルデータ入り）と画面をまとめて起動します。
+
+データの置き場所は2通りあります。
+- そのまま（`dev.sh` / `dev.cmd`）: データをメモリに置きます。止めると消え、起動のたびにサンプルデータに戻ります
+- `db` をつける（`./scripts/dev.sh db` / `dev-db.cmd`）: データを DynamoDB Local（自分のPCで動く DynamoDB の代わり）に置きます。止めても残り、サンプルデータは最初の1回だけ入ります。データはリポジトリの一番上の `.local/dynamodb` にあり、このフォルダを消すと最初からになります。Apple シリコンの Mac では動きません（backend/README.md）。
+手順の全体は [はじめに](../docs/guide/はじめに.md) の5章を見てください。
 
 ## dev.cmd は英数字だけで書く
 
@@ -21,7 +27,8 @@
 
 1. **必要なソフトの確認**: Java（Java 21 そのものが必要。17 など別の版だけだとバックエンドの起動で失敗する。環境変数 `JAVA_HOME` か、`where java` で見つかるか）、Node.js（`npm`）、`curl.exe`（Windows 10 の1803以降と Windows 11 には最初から入っている）があるか確かめる。なければメッセージを出して止まる
 2. **前回のバックエンドを止める**: ポート8080が応答したら、前回のバックエンドが残っているとみなし、`gradlew.bat --stop`（裏で動いている Gradle とその中のバックエンドを止める命令）で止める。古いコードのまま動き続けたり、ポートが使えず起動に失敗したりしないようにするため
-3. **バックエンドを裏で起動する**: `start /b` で同じウィンドウの裏側で動かす。`--args=--spring.profiles.active=demo` はサンプルデータを入れる設定（demo プロファイル）の指定。出力は `backend.log` に書く。バックエンドが終わったら（失敗したときも）`backend.exited` という目印のファイルを作る
+3a. **（`db` のときだけ）DynamoDB Local を裏で起動する**: `gradlew.bat :backend:infra:runDynamoDbLocal` をポート8000で動かし、出力は `dynamodb.log` に書く。ポート8000に接続できるまで待つ。失敗したら `dynamodb.exited` という目印のファイルができるので、待たずに止まる
+3. **バックエンドを裏で起動する**: `start /b` で同じウィンドウの裏側で動かす。`--args=--spring.profiles.active=demo` はサンプルデータを入れる設定（demo プロファイル）の指定。`db` のときは `local,demo`（local は DynamoDB Local に保存する設定）。出力は `backend.log` に書く。バックエンドが終わったら（失敗したときも）`backend.exited` という目印のファイルを作る
 4. **応答を待つ**: 1秒ごとに `curl.exe` で http://localhost:8080/applications に問い合わせ、最大10分待つ。待っている間に `backend.exited` ができたら起動に失敗したとわかるので、`backend.log` の最後の30行を表示して止まる
 5. **画面を起動する**: `frontend` フォルダで、初回だけ `npm ci`（部品のインストール）をしてから、`npm run generate:api`（APIの型を作る）と `npx vite`（画面の開発サーバー）を実行する。`npm` や `npx` は中身が別のスクリプトなので `call` をつけて呼ぶ（つけないと、そこで dev.cmd が終わってしまう）
 

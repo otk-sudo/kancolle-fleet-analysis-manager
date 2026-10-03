@@ -12,7 +12,13 @@ import java.util.Optional;
  */
 public interface ApplicationRepository {
 
-    /** 新規保存または上書き保存する。 */
+    /**
+     * 新規保存または上書き保存する。
+     *
+     * @throws io.github.otksudo.fleetanalysis.domain.ConflictException
+     *         同じフォームの回答ID（submissionId）が、別の応募としてすでに保存されているとき。
+     *         同じ回答がほぼ同時に2回届いたときに、二重登録を防ぐための最後の砦
+     */
     void save(Application application);
 
     Optional<Application> findById(String id);
