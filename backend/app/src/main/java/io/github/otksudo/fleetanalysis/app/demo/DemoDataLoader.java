@@ -1,6 +1,7 @@
 package io.github.otksudo.fleetanalysis.app.demo;
 
 import io.github.otksudo.fleetanalysis.domain.application.Application;
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationStatus;
 import io.github.otksudo.fleetanalysis.domain.application.IntakeCommand;
@@ -35,16 +36,23 @@ public class DemoDataLoader implements ApplicationRunner {
     private static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
 
     private final ApplicationService applicationService;
+    private final ApplicationRepository repository;
     private final Clock clock;
     private int submissionCount = 0;
 
-    public DemoDataLoader(ApplicationService applicationService, Clock clock) {
+    public DemoDataLoader(ApplicationService applicationService, ApplicationRepository repository, Clock clock) {
         this.applicationService = applicationService;
+        this.repository = repository;
         this.clock = clock;
     }
 
     @Override
     public void run(ApplicationArguments args) {
+        // すでに応募があれば何もしない（DynamoDB Local のように止めてもデータが残る保存先で、
+        // 起動するたびにサンプルが増えたり、ステータスの変更が失敗したりしないように）
+        if (!repository.findAll().isEmpty()) {
+            return;
+        }
         // 過去に分析済みの人が、もう一度応募している（「再応募」の印がつき、配信用画面で前回と比べられる）
         Application past = submit(60, "demo_teitoku01", "朝霧", false, "1〜3年", "〜3,000円", "継続3群", "イベント",
                 "E-3甲を突破したい", null);

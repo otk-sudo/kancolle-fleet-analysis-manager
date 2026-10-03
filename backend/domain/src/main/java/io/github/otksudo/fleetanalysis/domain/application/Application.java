@@ -70,6 +70,55 @@ public class Application {
     }
 
     /**
+     * 保存先（DynamoDB など）から読み込んだ値で応募を組み立て直す。
+     *
+     * <p>コンストラクタは「新しく受け付けた応募」を作るためのもので、ステータスなどは初期値になる。
+     * 保存済みの応募を読み込むときは、運用中に変わった値（ステータス、配信日など）もそのまま戻す必要があるので、
+     * こちらを使う。業務ロジックからは呼ばない（保存先の実装だけが使う）。
+     *
+     * @param state 運用中に変わる値をまとめたもの
+     */
+    public static Application restore(
+            String id,
+            String submissionId,
+            XId xId,
+            String admiralName,
+            boolean anonymous,
+            String simulatorUrl,
+            String formVersion,
+            Map<String, Object> answers,
+            Instant receivedAt,
+            List<Flag> flags,
+            State state) {
+        Application application = new Application(
+                id, submissionId, xId, admiralName, anonymous, simulatorUrl, formVersion, answers, receivedAt, flags);
+        application.status = Objects.requireNonNull(state.status(), "status");
+        application.streamDate = state.streamDate();
+        application.memo = state.memo();
+        application.position = state.position();
+        application.wonLottery = state.wonLottery();
+        application.updatedAt = Objects.requireNonNull(state.updatedAt(), "updatedAt");
+        application.statusChangedAt = Objects.requireNonNull(state.statusChangedAt(), "statusChangedAt");
+        return application;
+    }
+
+    /**
+     * 運用中に変わる値をまとめたもの（{@link #restore} で使う）。
+     *
+     * <p>{@code record} は「値を入れておくだけのクラス」を短く書くためのJavaの仕組み。
+     * フィールド、コンストラクタ、値を取り出すメソッド（status() など）が自動で作られる。
+     */
+    public record State(
+            ApplicationStatus status,
+            LocalDate streamDate,
+            String memo,
+            long position,
+            boolean wonLottery,
+            Instant updatedAt,
+            Instant statusChangedAt) {
+    }
+
+    /**
      * ステータスを変える。変えてはいけない組み合わせなら {@link ConflictException}。
      *
      * @param next 新しいステータス

@@ -1,5 +1,6 @@
 package io.github.otksudo.fleetanalysis.domain.application;
 
+import io.github.otksudo.fleetanalysis.domain.ConflictException;
 import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.NotFoundException;
 import io.github.otksudo.fleetanalysis.domain.XId;
@@ -44,9 +45,15 @@ public class ApplicationService {
     public Application submit(IntakeCommand command) {
         // 「同じ回答IDがすでにあるか確かめる」と「保存する」の間に別のリクエストが割り込むと、二重に登録されてしまう。
         // 保存先を鍵（ロック）にして、同時に1つずつしか動かないようにする（抽選などほかの変更も同じ鍵を使う）。
-        // TODO(段階1): DynamoDBでは「同じIDがなければ書き込む」条件付き書き込みにする
+        // ただしこの鍵は1つのサーバーの中でしか効かない。本番（AWS Lambda）では複数のサーバーが同時に動くので、
+        // 保存先も「同じ回答IDがすでに別の応募として保存されていたら断る」ようにしてある（ConflictException）。
+        // 断られたときは、先に保存された応募を返す（同じ回答の再送なので、受付済みとして扱ってよい）。
         synchronized (repository) {
-            return submitLocked(command);
+            try {
+                return submitLocked(command);
+            } catch (ConflictException e) {
+                return repository.findBySubmissionId(command.submissionId()).orElseThrow(() -> e);
+            }
         }
     }
 

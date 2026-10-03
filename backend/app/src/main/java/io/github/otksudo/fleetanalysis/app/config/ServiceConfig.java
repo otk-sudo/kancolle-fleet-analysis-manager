@@ -4,9 +4,12 @@ import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRepository;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryService;
+import io.github.otksudo.fleetanalysis.infra.dynamodb.DynamoDbStorage;
 import io.github.otksudo.fleetanalysis.infra.memory.InMemoryApplicationRepository;
 import io.github.otksudo.fleetanalysis.infra.memory.InMemoryLotteryRepository;
 import java.time.Clock;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,15 +31,54 @@ public class ServiceConfig {
         return Clock.systemUTC();
     }
 
-    // TODO(段階1): DynamoDB版の保存先ができたら、ここを差し替える（試作ではメモリに保存するので、再起動すると消える）
-    @Bean
-    public ApplicationRepository applicationRepository() {
-        return new InMemoryApplicationRepository();
+    /**
+     * 保存先をメモリにするときの部品（設定 {@code app.storage: memory}。試作・テスト用）。
+     *
+     * <p>{@code @ConditionalOnProperty} は「設定がこの値のときだけ、このクラスの部品を作る」という目印。
+     * 設定がないときもこちらを使う（matchIfMissing = true）。
+     */
+    @Configuration
+    @ConditionalOnProperty(name = "app.storage", havingValue = "memory", matchIfMissing = true)
+    static class InMemoryStorageConfig {
+
+        @Bean
+        ApplicationRepository applicationRepository() {
+            return new InMemoryApplicationRepository();
+        }
+
+        @Bean
+        LotteryRepository lotteryRepository() {
+            return new InMemoryLotteryRepository();
+        }
     }
 
-    @Bean
-    public LotteryRepository lotteryRepository() {
-        return new InMemoryLotteryRepository();
+    /**
+     * 保存先を DynamoDB にするときの部品（設定 {@code app.storage: dynamodb}。本番と、手元の DynamoDB Local 用）。
+     *
+     * <p>接続（DynamoDbStorage）は close() を持つので、Spring がアプリの終了時に自動で閉じてくれる。
+     */
+    @Configuration
+    @ConditionalOnProperty(name = "app.storage", havingValue = "dynamodb")
+    static class DynamoDbStorageConfig {
+
+        @Bean
+        DynamoDbStorage dynamoDbStorage(
+                @Value("${app.dynamodb.table-name}") String tableName,
+                @Value("${app.dynamodb.region}") String region,
+                @Value("${app.dynamodb.endpoint:}") String endpoint,
+                @Value("${app.dynamodb.create-table:false}") boolean createTable) {
+            return DynamoDbStorage.connect(new DynamoDbStorage.Settings(tableName, region, endpoint, createTable));
+        }
+
+        @Bean
+        ApplicationRepository applicationRepository(DynamoDbStorage storage) {
+            return storage.applications();
+        }
+
+        @Bean
+        LotteryRepository lotteryRepository(DynamoDbStorage storage) {
+            return storage.lotteries();
+        }
     }
 
     // メソッドの引数に書いた部品は、Spring が上で作ったものを渡してくれる（依存性の注入）

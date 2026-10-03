@@ -5,6 +5,16 @@ app:
   # フォーム（Apps Script）だけが知っている秘密キー。本番では必ず環境変数 FORM_KEY で別の値を渡す。
   # 既定値は手元での試作用で、知られても困らない値にしている
   form-key: ${FORM_KEY:dev-form-key}
+  # 保存先。memory = メモリ（止めると消える。試作・テスト用）、dynamodb = DynamoDB（本番と、手元の DynamoDB Local）
+  storage: ${APP_STORAGE:memory}
+  # DynamoDB の設定（storage が dynamodb のときだけ使う）
+  dynamodb:
+    table-name: ${DYNAMODB_TABLE:Main}
+    region: ${AWS_REGION:ap-northeast-1}
+    # 接続先。空なら本物の AWS。手元の DynamoDB Local を使うときは application-local.yml で指定する
+    endpoint: ${DYNAMODB_ENDPOINT:}
+    # テーブルがなければ作るか。本番のテーブルは CDK で作るので false
+    create-table: false
 
 server:
   port: 8080
