@@ -1,38 +1,53 @@
 package io.github.otksudo.fleetanalysis.domain.application;
 
 import io.github.otksudo.fleetanalysis.domain.ConflictException;
+import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.XId;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 応募1件。
  *
- * <p>受付時に決まる情報（XのID、回答など）は変えられないように final にし、
- * 運用中に変わる情報（ステータス、配信日、メモ、並び順）だけを変更用のメソッドで変える。
+ * <p>受付時に決まる情報（回答ID、提督名、受付日時など）は変えられないように final にし、
+ * 運用中に変わる情報（ステータス、配信日、メモ、並び順、印など）だけを変更用のメソッドで変える。
  * こうしておくと「どこで何が変わるか」が追いやすい。
+ *
+ * <p>XのIDは、応募者が打ち間違えたときに直せるよう（仕様 5.6）、変更できる値にしている。
+ *
+ * <p>「版」（version）について: 2人が同時に同じ応募を変えたとき、後から保存した人の変更で先の人の変更を
+ * 消してしまわないように（仕様 5.1）、応募ごとに版の番号を持たせている。保存先は「読み込んだときと版が同じなら保存し、
+ * 版を1つ増やす」「版が違えば（誰かが先に保存していれば）断る」という動きをする。これを「楽観ロック」と呼ぶ。
  */
 public class Application {
 
     private final String id;
     private final String submissionId;
-    private final XId xId;
     private final String admiralName;
     private final boolean anonymous;
     private final String simulatorUrl;
     private final String formVersion;
-    private final Map<String, Object> answers;
     private final Instant receivedAt;
-    private final List<Flag> flags;
 
+    private XId xId;
+    private Map<String, Object> answers;
+    private List<Flag> flags;
     private ApplicationStatus status;
+    /** 見送りの理由。「見送り」のときだけ値がある（仕様 5.6） */
+    private SkipReason skipReason;
     private LocalDate streamDate;
     private String memo;
+    /** 分析メモ（配信者が残す要点。仕様 5.5） */
+    private String analysisMemo;
+    /** 配信アーカイブのURL（仕様 5.5） */
+    private String archiveUrl;
     /** 「次に分析する人」の並び順。小さいほど先。受付時は受付日時から作る（仕様 5.4） */
     private long position;
     /** 抽選で当選したか。落選補正のリセットに使う（仕様 6.3） */
@@ -40,6 +55,13 @@ public class Application {
     private Instant updatedAt;
     /** 最後にステータスを変えた日時。配信用画面で「最後に分析中にした人」を選ぶのに使う（メモの変更では変わらない） */
     private Instant statusChangedAt;
+    /** 版。0 はまだ一度も保存していない新しい応募。保存するたびに1増える（クラスの説明を参照） */
+    private long version;
+    /**
+     * まだ保存していない変更履歴。ステータスやXのIDを変えるとここに足され、保存先が応募と一緒に保存してから空にする。
+     * 応募と履歴を別々に保存すると、片方だけ保存されて食い違うことがあるため、一緒に保存できるようにしている。
+     */
+    private final List<HistoryEntry> pendingHistory = new ArrayList<>();
 
     public Application(
             String id,
@@ -93,12 +115,16 @@ public class Application {
         Application application = new Application(
                 id, submissionId, xId, admiralName, anonymous, simulatorUrl, formVersion, answers, receivedAt, flags);
         application.status = Objects.requireNonNull(state.status(), "status");
+        application.skipReason = state.skipReason();
         application.streamDate = state.streamDate();
         application.memo = state.memo();
+        application.analysisMemo = state.analysisMemo();
+        application.archiveUrl = state.archiveUrl();
         application.position = state.position();
         application.wonLottery = state.wonLottery();
         application.updatedAt = Objects.requireNonNull(state.updatedAt(), "updatedAt");
         application.statusChangedAt = Objects.requireNonNull(state.statusChangedAt(), "statusChangedAt");
+        application.version = state.version();
         return application;
     }
 
@@ -110,28 +136,127 @@ public class Application {
      */
     public record State(
             ApplicationStatus status,
+            SkipReason skipReason,
             LocalDate streamDate,
             String memo,
+            String analysisMemo,
+            String archiveUrl,
             long position,
             boolean wonLottery,
             Instant updatedAt,
-            Instant statusChangedAt) {
+            Instant statusChangedAt,
+            long version) {
+    }
+
+    /** 今の値を {@link State} にまとめる（{@link #copy} と保存先の実装で使う）。 */
+    public State state() {
+        return new State(status, skipReason, streamDate, memo, analysisMemo, archiveUrl, position, wonLottery,
+                updatedAt, statusChangedAt, version);
     }
 
     /**
-     * ステータスを変える。変えてはいけない組み合わせなら {@link ConflictException}。
-     *
-     * @param next 新しいステータス
-     * @param now  変更した日時
+     * 同じ中身の別のオブジェクトを作る。メモリ保存の実装が、DynamoDB と同じように
+     * 「読み込むたびに別のオブジェクトを返す」ために使う（保存していない変更が、ほかの処理から見えないように）。
      */
-    public void changeStatus(ApplicationStatus next, Instant now) {
+    public Application copy() {
+        return restore(id, submissionId, xId, admiralName, anonymous, simulatorUrl, formVersion, answers, receivedAt,
+                flags, state());
+    }
+
+    /**
+     * ステータスを手で変える（仕様 5.1 の表で許された組み合わせだけ）。許されなければ {@link ConflictException}。
+     *
+     * @param next       新しいステータス
+     * @param skipReason 見送りの理由。「見送り」にするときは必須、それ以外は null
+     * @param now        変更した日時
+     * @param actor      変更した人
+     */
+    public void changeStatus(ApplicationStatus next, SkipReason skipReason, Instant now, String actor) {
         if (!status.canChangeTo(next)) {
             throw new ConflictException(
                     "「" + status.label() + "」から「" + next.label() + "」には変更できません");
         }
+        applyStatus(next, skipReason, now, actor, null);
+    }
+
+    /**
+     * 仕組み（抽選、「次の人へ」、重複の解消など）がステータスを変える。手で変えるときの表（仕様 5.1）は使わない。
+     *
+     * <p>例: 抽選で外れた人を「落選」にするのは、手ではできないが抽選ではできる。
+     *
+     * @param note どの操作で変わったか（履歴に残す。例: "抽選"）
+     */
+    public void changeStatusBySystem(ApplicationStatus next, SkipReason skipReason, Instant now, String actor, String note) {
+        applyStatus(next, skipReason, now, actor, note);
+    }
+
+    private void applyStatus(ApplicationStatus next, SkipReason reason, Instant now, String actor, String note) {
+        if (next == ApplicationStatus.SKIPPED && reason == null) {
+            throw new InvalidValueException("見送りにするときは理由を選んでください");
+        }
+        if (next != ApplicationStatus.SKIPPED && reason != null) {
+            throw new InvalidValueException("見送りの理由は、見送りにするときだけ選べます");
+        }
+        if (next == status) {
+            if (next == ApplicationStatus.SKIPPED && reason != skipReason) {
+                // ステータスはそのままで、見送りの理由だけを直す
+                changeSkipReason(reason, now);
+            }
+            return;
+        }
+        String detail = reason == null ? null : "見送りの理由: " + reason.label();
+        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now, Objects.requireNonNull(actor, "actor"),
+                HistoryEntry.Kind.STATUS, status.code(), next.code(), joinNotes(note, detail)));
         this.status = next;
+        this.skipReason = reason;
         this.updatedAt = now;
         this.statusChangedAt = now;
+    }
+
+    private static String joinNotes(String first, String second) {
+        if (first == null) {
+            return second;
+        }
+        return second == null ? first : first + "、" + second;
+    }
+
+    /** 見送りの理由だけを直す（見送りのときだけ）。 */
+    public void changeSkipReason(SkipReason reason, Instant now) {
+        if (status != ApplicationStatus.SKIPPED) {
+            throw new InvalidValueException("見送りの理由は、見送りの応募にだけ付けられます");
+        }
+        this.skipReason = Objects.requireNonNull(reason, "reason");
+        this.updatedAt = now;
+    }
+
+    /**
+     * XのIDを直す（仕様 5.6）。変更前のIDは履歴に残す。
+     * 回答の中のXのIDも同じ値に直す（画面で回答を見たときに食い違わないように）。
+     */
+    public void changeXId(XId next, Instant now, String actor) {
+        if (next.equals(xId)) {
+            return;
+        }
+        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now, Objects.requireNonNull(actor, "actor"),
+                HistoryEntry.Kind.X_ID, xId.value(), next.value(), null));
+        Map<String, Object> newAnswers = new LinkedHashMap<>(answers);
+        newAnswers.put(AnswerKeys.X_ID, next.value());
+        this.answers = Collections.unmodifiableMap(newAnswers);
+        this.xId = next;
+        this.updatedAt = now;
+    }
+
+    /**
+     * 印（重複・再応募・条件外）を付け直す（仕様 5.2）。
+     *
+     * @return 印が変わったら true（保存が必要かどうかの判断に使う）
+     */
+    public boolean replaceFlags(List<Flag> next) {
+        if (flags.equals(next)) {
+            return false;
+        }
+        this.flags = List.copyOf(next);
+        return true;
     }
 
     public void changeStreamDate(LocalDate streamDate, Instant now) {
@@ -141,6 +266,17 @@ public class Application {
 
     public void changeMemo(String memo, Instant now) {
         this.memo = memo;
+        this.updatedAt = now;
+    }
+
+    public void changeAnalysisMemo(String analysisMemo, Instant now) {
+        this.analysisMemo = analysisMemo;
+        this.updatedAt = now;
+    }
+
+    /** @param archiveUrl 配信アーカイブのURL。null なら消す */
+    public void changeArchiveUrl(String archiveUrl, Instant now) {
+        this.archiveUrl = archiveUrl;
         this.updatedAt = now;
     }
 
@@ -154,6 +290,20 @@ public class Application {
      */
     public void markWonLottery() {
         this.wonLottery = true;
+    }
+
+    /** まだ保存していない変更履歴（古い順）。 */
+    public List<HistoryEntry> pendingHistory() {
+        return List.copyOf(pendingHistory);
+    }
+
+    /**
+     * 保存が終わったときに保存先が呼ぶ。版を1つ進め、保存した履歴を「まだ保存していない」一覧から外す。
+     * 業務ロジックからは呼ばない。
+     */
+    public void markSaved() {
+        this.version++;
+        this.pendingHistory.clear();
     }
 
     public String id() {
@@ -222,6 +372,22 @@ public class Application {
 
     public Instant statusChangedAt() {
         return statusChangedAt;
+    }
+
+    public SkipReason skipReason() {
+        return skipReason;
+    }
+
+    public String analysisMemo() {
+        return analysisMemo;
+    }
+
+    public String archiveUrl() {
+        return archiveUrl;
+    }
+
+    public long version() {
+        return version;
     }
 
     /** 抽選・並べ替えの対象になる「印」がついているか（重複・条件外）。再応募は問題ないので含めない */

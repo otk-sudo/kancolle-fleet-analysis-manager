@@ -3,8 +3,10 @@ package io.github.otksudo.fleetanalysis.app.web;
 import io.github.otksudo.fleetanalysis.app.api.model.Application;
 import io.github.otksudo.fleetanalysis.app.api.model.Flag;
 import io.github.otksudo.fleetanalysis.app.api.model.FlagType;
+import io.github.otksudo.fleetanalysis.app.api.model.HistoryEntry;
 import io.github.otksudo.fleetanalysis.app.api.model.Lottery;
 import io.github.otksudo.fleetanalysis.app.api.model.LotteryEntriesInner;
+import io.github.otksudo.fleetanalysis.app.api.model.SkipReason;
 import io.github.otksudo.fleetanalysis.app.api.model.StreamApplicant;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRecord;
 import java.math.BigDecimal;
@@ -40,12 +42,33 @@ final class ApiMapper {
         api.setStatus(domain.status().code());
         api.setStreamDate(domain.streamDate());
         api.setMemo(domain.memo());
+        api.setSkipReason(domain.skipReason() == null ? null : SkipReason.fromValue(domain.skipReason().code()));
+        api.setAnalysisMemo(domain.analysisMemo());
+        api.setArchiveUrl(domain.archiveUrl() == null ? null : URI.create(domain.archiveUrl()));
         api.setFlags(toApiFlags(domain.flags()));
         api.setFormVersion(domain.formVersion());
         api.setAnswers(new LinkedHashMap<>(domain.answers()));
         api.setReceivedAt(toApi(domain.receivedAt()));
         api.setUpdatedAt(toApi(domain.updatedAt()));
+        api.setStatusChangedAt(toApi(domain.statusChangedAt()));
+        api.setVersion(domain.version());
         return api;
+    }
+
+    static List<HistoryEntry> toApiHistory(List<io.github.otksudo.fleetanalysis.domain.application.HistoryEntry> entries) {
+        List<HistoryEntry> result = new ArrayList<>();
+        for (var entry : entries) {
+            HistoryEntry api = new HistoryEntry(
+                    entry.id(),
+                    toApi(entry.at()),
+                    entry.actor(),
+                    HistoryEntry.KindEnum.fromValue(entry.kind().code()),
+                    entry.from(),
+                    entry.to());
+            api.setNote(entry.note());
+            result.add(api);
+        }
+        return result;
     }
 
     static List<Application> toApi(List<io.github.otksudo.fleetanalysis.domain.application.Application> domains) {

@@ -13,13 +13,31 @@ import java.util.Optional;
 public interface ApplicationRepository {
 
     /**
-     * 新規保存または上書き保存する。
+     * 1件を新規保存または上書き保存する。{@link #saveAll} に1件だけ渡すのと同じ。
+     */
+    default void save(Application application) {
+        saveAll(List.of(application));
+    }
+
+    /**
+     * 複数の応募を「全部保存するか、1件も保存しないか」のどちらかで保存する（まとめてのステータス変更などで使う）。
+     *
+     * <p>それぞれの応募は、読み込んだときと版（{@link Application#version()}）が同じときだけ保存する。
+     * 保存できたら版を1つ進め、まだ保存していない変更履歴（{@link Application#pendingHistory()}）も一緒に保存する
+     * （{@link Application#markSaved()} を呼ぶ）。
      *
      * @throws io.github.otksudo.fleetanalysis.domain.ConflictException
-     *         同じフォームの回答ID（submissionId）が、別の応募としてすでに保存されているとき。
-     *         同じ回答がほぼ同時に2回届いたときに、二重登録を防ぐための最後の砦
+     *         次のどれかのとき（1件も保存しない）。
+     *         <ul>
+     *           <li>ほかの人が先に同じ応募を保存していた（版が違う）
+     *           <li>同じフォームの回答ID（submissionId）が、別の応募としてすでに保存されている。
+     *               同じ回答がほぼ同時に2回届いたときに、二重登録を防ぐための最後の砦
+     *         </ul>
      */
-    void save(Application application);
+    void saveAll(List<Application> applications);
+
+    /** 応募の変更履歴（古い順）。 */
+    List<HistoryEntry> findHistory(String applicationId);
 
     Optional<Application> findById(String id);
 
@@ -32,6 +50,6 @@ public interface ApplicationRepository {
     /** 同じXのIDの応募（順番は決まっていない）。 */
     List<Application> findByXId(XId xId);
 
-    /** 同じXのIDの応募をすべて消す（削除依頼への対応）。 */
+    /** 同じXのIDの応募を、変更履歴も含めてすべて消す（削除依頼への対応）。 */
     void deleteByXId(XId xId);
 }

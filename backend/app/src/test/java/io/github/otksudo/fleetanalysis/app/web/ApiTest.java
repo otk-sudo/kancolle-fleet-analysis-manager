@@ -37,11 +37,15 @@ class ApiTest {
     @Autowired
     private MockMvc mockMvc;
 
+    /**
+     * 応募受付のJSON。受付日時は回答IDの番号の秒にする（例: s2 → 12:00:02）。
+     * 同じ人の応募の「どちらが先か」で印が決まるので、受付順がはっきりするようにしている。
+     */
     private static String intakeJson(String submissionId, String xId) {
         return """
                 {
                   "submissionId": "%s",
-                  "submittedAt": "2026-10-01T12:00:00+09:00",
+                  "submittedAt": "2026-10-01T12:00:%02d+09:00",
                   "formVersion": "v1",
                   "answers": {
                     "xId": "%s",
@@ -52,7 +56,7 @@ class ApiTest {
                     "purpose": "イベント"
                   }
                 }
-                """.formatted(submissionId, xId);
+                """.formatted(submissionId, Integer.parseInt(submissionId.replaceAll("\\D", "")), xId);
     }
 
     private String submit(String submissionId, String xId) throws Exception {
@@ -119,9 +123,87 @@ class ApiTest {
         // 未着手 → 分析済み は、分析中を通らないと変えられない
         mockMvc.perform(patch("/applications/" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\": \"done\"}"))
+                        .content("{\"version\": %d, \"status\": \"done\"}".formatted(version(id))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("conflict"));
+    }
+
+    @Test
+    void 古い版での変更は409になり版がない変更は400になる() throws Exception {
+        String id = submit("s1", "@test_user");
+        long version = version(id);
+        String body = "{\"version\": %d, \"memo\": \"%s\"}";
+        mockMvc.perform(patch("/applications/" + id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted(version, "1人目")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(version + 1));
+        mockMvc.perform(patch("/applications/" + id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body.formatted(version, "2人目")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(patch("/applications/" + id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"memo\": \"版なし\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("invalid_value"));
+    }
+
+    @Test
+    void 見送りの理由つきで変えると履歴に残り配信日を消せる() throws Exception {
+        String id = submit("s1", "@test_user");
+        mockMvc.perform(patch("/applications/" + id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\": %d, \"streamDate\": \"2026-10-10\"}".formatted(version(id))))
+                .andExpect(jsonPath("$.streamDate").value("2026-10-10"));
+        mockMvc.perform(patch("/applications/" + id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\": %d, \"status\": \"skipped\", \"skipReason\": \"withdrawn\", \"clearStreamDate\": true}"
+                                .formatted(version(id))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.skipReason").value("withdrawn"))
+                .andExpect(jsonPath("$.streamDate").doesNotExist());
+
+        mockMvc.perform(get("/applications/" + id + "/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].kind").value("status"))
+                .andExpect(jsonPath("$[0].from").value("pending"))
+                .andExpect(jsonPath("$[0].to").value("skipped"));
+    }
+
+    @Test
+    void 重複の解消とまとめての変更と検索ができる() throws Exception {
+        String old = submit("s1", "@user_a");
+        String resent = submit("s2", "@user_a");
+        String other = submit("s3", "@user_b");
+
+        mockMvc.perform(post("/applications/" + resent + "/keep")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"version\": %d}".formatted(version(resent))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flags[0].type").value("reapply"));
+        mockMvc.perform(get("/applications/" + old))
+                .andExpect(jsonPath("$.status").value("skipped"))
+                .andExpect(jsonPath("$.skipReason").value("resubmitted"));
+
+        mockMvc.perform(post("/applications/bulk-status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\": [{\"id\": \"%s\", \"version\": %d}, {\"id\": \"%s\", \"version\": %d}], \"status\": \"scheduled\"}"
+                                .formatted(resent, version(resent), other, version(other))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items", hasSize(2)));
+
+        mockMvc.perform(get("/applications").param("q", "@USER_B"))
+                .andExpect(jsonPath("$.items", hasSize(1)))
+                .andExpect(jsonPath("$.items[0].id").value(other))
+                .andExpect(jsonPath("$.items[0].status").value("scheduled"));
+    }
+
+    /** 応募の今の版を読む（変更するときに送るため） */
+    private long version(String id) throws Exception {
+        String body = mockMvc.perform(get("/applications/" + id)).andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(body, "$.version")).longValue();
     }
 
     @Test
@@ -132,10 +214,7 @@ class ApiTest {
     @Test
     void 配信用画面にはXのIDと課金額を出さない() throws Exception {
         String id = submit("s1", "@test_user");
-        mockMvc.perform(patch("/applications/" + id)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\": \"analyzing\"}"))
-                .andExpect(status().isOk());
+        changeStatus(id, "analyzing");
 
         mockMvc.perform(get("/stream/current"))
                 .andExpect(status().isOk())
@@ -217,7 +296,7 @@ class ApiTest {
     private void changeStatus(String id, String status) throws Exception {
         mockMvc.perform(patch("/applications/" + id)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\": \"" + status + "\"}"))
+                        .content("{\"version\": %d, \"status\": \"%s\"}".formatted(version(id), status)))
                 .andExpect(status().isOk());
     }
 

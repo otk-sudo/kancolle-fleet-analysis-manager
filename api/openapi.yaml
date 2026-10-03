@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: 艦隊分析 応募者管理API
-  version: 0.1.0
+  version: 0.2.0
   description: 艦隊分析への応募を管理するAPI。仕様は docs/spec.md を参照。
 servers:
   - url: https://api.example.com
@@ -61,6 +61,16 @@ paths:
           in: query
           schema:
             type: string
+        - name: rankingEffort
+          in: query
+          description: 戦果への取り組みで絞り込み
+          schema:
+            type: string
+        - name: q
+          in: query
+          description: 提督名・XのIDの一部で検索（大文字・小文字、先頭の@は区別しない）
+          schema:
+            type: string
         - name: flag
           in: query
           schema:
@@ -102,7 +112,10 @@ paths:
     patch:
       tags: [applications]
       operationId: updateApplication
-      summary: ステータス・配信日・メモの変更（配信者・運営）
+      summary: ステータス・配信日・メモ・分析メモ・XのIDの変更（配信者・運営）
+      description: |
+        version には画面で読み込んだときの版を入れる。ほかの人が先に変更していて版が合わなければ 409（上書きしない）。
+        ステータスは仕様 5.1 の表で「手で変えられる」組み合わせだけ変えられる。見送りにするときは skipReason が必要。
       requestBody:
         required: true
         content:
@@ -116,6 +129,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /applications/{applicationId}/history:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags: [applications]
+      operationId: listApplicationHistory
+      summary: 応募の変更履歴（ステータス・XのIDを、いつ・誰が・何から何へ変えたか）
+      responses:
+        '200':
+          description: 履歴（古い順）
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoryEntry'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /applications/{applicationId}/keep:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags: [applications]
+      operationId: keepApplication
+      summary: 重複の解消。この応募を残し、同じ人のほかの「未着手・分析予定」の応募を見送り（再送のため）にする（仕様 5.2）
+      description: |
+        見送りにする中に「分析予定」があれば、残す応募がそのステータス・並び順・当選の扱いを引き継ぐ。
+        同じ人の応募に「分析中」があるときは 409。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeepRequest'
+      responses:
+        '200':
+          description: 残した応募（引き継いだあと）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /applications/bulk-status:
+    post:
+      tags: [applications]
+      operationId: bulkChangeStatus
+      summary: 複数の応募のステータスをまとめて変える（仕様 5.6）
+      description: |
+        全部変えられるときだけ変える（1件でも変えられなければ、どれも変えずに 409）。
+        1回に変えられるのは25件まで。変えられるステータスは pending・scheduled・skipped だけ（それ以外は 400）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkStatusRequest'
+      responses:
+        '200':
+          description: 変更後の応募
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
@@ -542,6 +635,15 @@ components:
           format: date
         memo:
           type: string
+        skipReason:
+          $ref: '#/components/schemas/SkipReason'
+        analysisMemo:
+          type: string
+          description: 分析メモ（配信者が残す要点）。管理画面だけに出す
+        archiveUrl:
+          type: string
+          format: uri
+          description: 配信アーカイブのURL（時刻付きも可）。管理画面だけに出す
         flags:
           type: array
           items:
@@ -556,7 +658,15 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, xId, admiralName, anonymous, simulatorUrl, status, flags, formVersion, answers, receivedAt, updatedAt]
+        statusChangedAt:
+          type: string
+          format: date-time
+          description: 最後にステータスを変えた日時（分析済みなら、分析した日時）
+        version:
+          type: integer
+          format: int64
+          description: 同時変更の検知用の版。変更のたびに1増える。変更するときはこの値を送る
+      required: [id, xId, admiralName, anonymous, simulatorUrl, status, flags, formVersion, answers, receivedAt, updatedAt, statusChangedAt, version]
     ApplicationPage:
       type: object
       properties:
@@ -569,14 +679,101 @@ components:
       required: [items, nextCursor]
     ApplicationUpdate:
       type: object
+      description: 送った項目だけ変える（送らなかった項目はそのまま）
       properties:
+        version:
+          type: integer
+          format: int64
+          description: 画面で読み込んだときの版。ほかの人が先に変更していたら 409
         status:
           $ref: '#/components/schemas/StatusCode'
+        skipReason:
+          $ref: '#/components/schemas/SkipReason'
         streamDate:
-          type: [string, 'null']
+          type: string
           format: date
+        clearStreamDate:
+          type: boolean
+          description: true なら配信日を消す
         memo:
           type: string
+        analysisMemo:
+          type: string
+        archiveUrl:
+          type: string
+          description: 空文字なら消す。それ以外は http(s) のURL
+        xId:
+          type: string
+          description: XのIDの修正（応募者の打ち間違いなど。仕様 5.6）。変更前のIDは変更履歴に残る
+      required: [version]
+    KeepRequest:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int64
+          description: 残す応募の、画面で読み込んだときの版
+      required: [version]
+    BulkStatusRequest:
+      type: object
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 25
+          items:
+            $ref: '#/components/schemas/VersionedId'
+        status:
+          $ref: '#/components/schemas/StatusCode'
+        skipReason:
+          $ref: '#/components/schemas/SkipReason'
+      required: [items, status]
+    VersionedId:
+      type: object
+      properties:
+        id:
+          type: string
+        version:
+          type: integer
+          format: int64
+      required: [id, version]
+    BulkStatusResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Application'
+      required: [items]
+    SkipReason:
+      type: string
+      description: 見送りの理由（仕様 5.6）。resubmitted=重複（再送のため）、ineligible=条件外、withdrawn=本人の取り下げ、other=その他（メモに書く）
+      enum: [resubmitted, ineligible, withdrawn, other]
+    HistoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+          description: 変更した人
+        kind:
+          type: string
+          enum: [status, xId]
+          description: status=ステータスの変更、xId=XのIDの修正
+        from:
+          type: string
+          description: 変更前（ステータスのコード、またはXのID）
+        to:
+          type: string
+          description: 変更後
+        note:
+          type: string
+          description: 補足（見送りの理由、どの操作で変わったか、など）
+      required: [id, at, actor, kind, from, to]
     StreamView:
       type: object
       properties:
@@ -601,7 +798,7 @@ components:
           oneOf:
             - $ref: '#/components/schemas/Answers'
             - type: 'null'
-          description: 前回応募の回答（比較用）
+          description: 前回分析した応募（同じXのIDで分析済みのうち一番新しいもの）の回答（比較用）
       required: [displayName, simulatorUrl, answers, previous]
     LotteryRequest:
       type: object

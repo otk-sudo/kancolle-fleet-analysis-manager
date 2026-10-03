@@ -32,7 +32,7 @@ public class StreamController implements StreamApi {
         // 抽選を使う設定のときは、未着手の人は抽選で選ぶので「次の人へ」では選ばない
         boolean includePending = !lotteryService.settings().settings().enabled();
         StreamView view = new StreamView(
-                applicationService.advanceStream(includePending).map(ApiMapper::toApi).orElse(null));
+                applicationService.advanceStream(includePending, Actors.current()).map(ApiMapper::toApi).orElse(null));
         return ResponseEntity.ok(view);
     }
 }

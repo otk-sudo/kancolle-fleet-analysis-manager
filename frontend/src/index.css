@@ -227,6 +227,51 @@ tr.changed th {
   color: var(--ok);
 }
 
+/* 入力欄とボタンを横に並べる（配信日の「消す」など） */
+span.inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* 一覧で選んだ応募をまとめて変える帯 */
+.bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+/* 前回の分析（詳細画面） */
+dl.previous {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+}
+dl.previous dt {
+  color: var(--muted);
+}
+dl.previous dd {
+  margin: 0;
+}
+/* 改行をそのまま見せる（分析メモ） */
+.pre {
+  white-space: pre-wrap;
+}
+ul.history {
+  padding-left: 20px;
+  font-size: 14px;
+}
+
 /* 2列のレイアウト（狭い画面では1列） */
 .columns {
   display: grid;

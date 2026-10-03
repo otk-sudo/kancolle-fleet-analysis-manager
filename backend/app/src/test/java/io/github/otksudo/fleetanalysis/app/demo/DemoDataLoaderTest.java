@@ -2,8 +2,8 @@ package io.github.otksudo.fleetanalysis.app.demo;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationFilter;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,8 +24,9 @@ class DemoDataLoaderTest {
 
     @Test
     void サンプル応募が登録され配信用画面に1人出る() {
-        assertThat(applicationService.list(List.of(), null, null, "queue")).hasSize(14);
+        assertThat(applicationService.list(ApplicationFilter.all(), "queue")).hasSize(14);
         assertThat(applicationService.streamView()).isPresent();
+        // 前回分析した応募（分析済み）と比べられる
         assertThat(applicationService.streamView().get().previous()).isNotNull();
     }
 }

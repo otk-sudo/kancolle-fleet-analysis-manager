@@ -20,12 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class LotteriesController implements LotteriesApi {
 
-    /**
-     * 抽選を実行した人として記録する名前。
-     * TODO(段階3): ログインができたら、ログインしている人の名前に置き換える
-     */
-    static final String PROTOTYPE_USER = "試作ユーザー";
-
     private final LotteryService lotteryService;
 
     public LotteriesController(LotteryService lotteryService) {
@@ -60,7 +54,7 @@ public class LotteriesController implements LotteriesApi {
         if (request.getIncludeFlagged() != null) {
             includeFlagged.addAll(request.getIncludeFlagged());
         }
-        LotteryRecord record = lotteryService.run(mode, winners, includeFlagged, PROTOTYPE_USER);
+        LotteryRecord record = lotteryService.run(mode, winners, includeFlagged, Actors.current());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiMapper.toApi(record));
     }
 }
