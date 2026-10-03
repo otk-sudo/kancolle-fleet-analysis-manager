@@ -17,7 +17,7 @@
 ├─ backend/             Java 21 / Spring Boot 4 / Gradle
 │  ├─ app/              起動の入口、API層（生成インターフェースの実装）
 │  ├─ domain/           業務ロジック（重複判定、条件ルール、抽選、ステータス遷移）。外部依存なし
-│  └─ infra/            データの保存（今は DynamoDB とメモリ。v1.2 で PostgreSQL に変える）
+│  └─ infra/            データの保存（今は DynamoDB とメモリ。v1.2 で SQLite に変える）
 ├─ frontend/            React + TypeScript（Vite）。APIクライアントはopenapi.yamlから生成
 ├─ gas/                 Googleフォーム連携のApps Script（v1.2 でウェブアプリに変える）
 ├─ docs/                仕様書・設計メモ
@@ -31,25 +31,20 @@
 
 ### v1.2 で使うもの（2026-10-03 に公式の資料で確かめた）
 
-**データベース: PostgreSQL（ツールに同梱する）**
-- 開発者が仕事で PostgreSQL を使うので、PostgreSQL にする（2026-10-03 OTさんの希望）
-- 配信者さんに PostgreSQL を別に入れてもらうのは大変なので、PostgreSQL のプログラム（Windows 用の zip 版）をツールのインストーラーに入れておき、ツールが起動したときに裏で PostgreSQL を起動し、終了するときに止める。zip 版は「ほかのアプリのインストーラーに PostgreSQL を入れたい人向け」と公式に書かれている（公式: https://www.postgresql.org/download/windows/ ）
-  - Windows のサービスとしては登録しない（配信者さんのPCに、ツール以外で動き続けるものを残さないため）
-  - データの置き場所（データディレクトリ）は、利用者ごとのデータのフォルダに作る。初めて起動したときに、ツールが作る（initdb）
-  - PostgreSQL も localhost でだけ待ち受け、決まった番号（PostgreSQL の標準の 5432 とは別の番号。ほかに入っている PostgreSQL とぶつからないように）を使う。パスワードは初めて起動したときにツールが作り、利用者ごとのフォルダに保存する
-  - インストーラーは大きくなる（推測。段階6で実際の大きさを測る）
-- PostgreSQL は無料で使える（PostgreSQL License。公式: https://www.postgresql.org/about/licence/ ）
-- バックアップの写しは `pg_dump` で作る。使用中のデータベースからでも、ほかの読み書きを止めずに、そろった写しが作れる（公式: https://www.postgresql.org/docs/current/app-pgdump.html ）。戻すときは `pg_restore` を使う（公式: https://www.postgresql.org/docs/current/app-pgrestore.html ）
-- PostgreSQL の大きな版（例: 17 → 18）が上がると、データディレクトリをそのまま使えない（公式: https://www.postgresql.org/docs/current/upgrading.html ）。そのため、ツールに入れる PostgreSQL の大きな版は固定する。上げるときは、ツールの新しい版が「pg_dump の写しから戻す」流れでデータを移す（小さな版の更新はそのまま使える。同じページ）
+**データベース: SQLite**
+- データベース全体が1つのファイルで、別のPCにコピーしても使える。ファイルの形式は、これからの版でも読めると約束されている（公式: https://www.sqlite.org/onefile.html ）
+- バックアップや、配信者さんのPCを替えるときの引っ越しがしやすい
+- Java からは JDBC ドライバーで使う。ドライバーは SQLite の公式のものではないので、段階4で選ぶときに確かめる
+- H2（Java だけで動くデータベース）も候補だった。ただ、版を上げるとファイルの移し替えが要ることがある（公式: https://www.h2database.com/html/migration-to-v2.html ）ので、SQLite にする
+- PostgreSQL（開発者が仕事で使うデータベース）も一度選んだが、2026-10-03 にOTさんが「配信者さん第一」で SQLite に決めた。PostgreSQL をツールに入れると、ダウンロードが大きくなる、大きな版を上げるときにデータの移し替えが要る（公式: https://www.postgresql.org/docs/current/upgrading.html ）、裏で別のプログラムが動き、止まる原因が増える、と配信者さんの負担が増えるため。SQLite は、1人で使うデスクトップアプリのデータの置き場所として使うのが、公式に挙げられている使い方（公式: https://www.sqlite.org/whentouse.html ）
+- バックアップの写しは `VACUUM INTO`（データベースの中身を別のファイルに書き出す命令）で作る。使用中のデータベースからでも、ある時点のそろった写しができる（公式: https://www.sqlite.org/lang_vacuum.html ）。ファイルをそのままコピーすると、書き込み途中の内容が抜けることがあるので使わない
+- バックアップから戻すときは、データベースへの接続をすべて閉じ、ファイルを入れ替えてから開き直す
 - 同時変更の検知（版）は、`UPDATE ... WHERE version = ?`（読み込んだときの版と同じときだけ更新する）で行う
-- 開発とテストでは、PostgreSQL を Docker などで動かす（Codespaces と GitHub Actions で使えるか、段階4で確かめる）
-- SQLite（1つのファイルのデータベース）も候補だった。PostgreSQL より配布は簡単だが、仕事で使う PostgreSQL を学べることを優先した
 
 **配布: jpackage**
 - Windows のインストーラー（exe か msi）を作る。Java の実行環境が中に入るので、配信者さんが Java を入れなくてよい（公式: https://docs.oracle.com/en/java/javase/21/jpackage/packaging-overview.html ）
 - インストーラーは Windows の上で作る必要があり、WiX という道具が要る（同じページ）。GitHub Actions の Windows の環境で作るつもり。WiX が入っているか、どの版の WiX が要るかは未確認
-- データ（PostgreSQL のデータディレクトリ）とバックアップは、インストール先ではなく利用者ごとのデータのフォルダに置く（入れ直しで消えないように）
-- インストーラーに PostgreSQL の zip 版も入れる
+- データのファイルは、インストール先ではなく利用者ごとのデータのフォルダに置く（入れ直しで消えないように）
 
 **フォーム連携: Apps Script のウェブアプリ**
 - `doPost`（POST で呼ばれたときに動く関数）で秘密キーを確かめてから、フォームの回答を JSON で返す（公式: https://developers.google.com/apps-script/guides/web ）
@@ -152,7 +147,7 @@ v1.2 で増えるAPI（段階4〜6で、先に openapi.yaml に書く）:
 - 抽選の重み: `weight = 1 + 落選回数 × 補正の強さ`（補正オフなら常に1）。重み付き非復元抽出
 - 乱数の種は抽選ごとに生成して記録する。同じ種と対象者なら同じ結果が再現できる
 - ステータス遷移は表で定義し、許されない遷移はエラーにする。「落選」へは抽選からだけ変えられる。抽選・「次の人へ」・重複の解消など仕組みが行う変更は、手で変えるときの表とは別の入口（`changeStatusBySystem`）を通す
-- 同時に変更されたときは、応募の版を比べて後から来た変更を409にする（v1.1 は DynamoDB の条件付き書き込み。v1.2 は PostgreSQL の `UPDATE ... WHERE version = ?`）
+- 同時に変更されたときは、応募の版を比べて後から来た変更を409にする（v1.1 は DynamoDB の条件付き書き込み。v1.2 は SQLite の `UPDATE ... WHERE version = ?`）
 
 ## 5. 開発の進め方（段階）
 
@@ -162,9 +157,9 @@ v1.2 で増えるAPI（段階4〜6で、先に openapi.yaml に書く）:
 | 1. 受付と一覧 | 受付API、Apps Script、一覧・詳細API、DynamoDB、ローカル実行（DynamoDB Local） | フォームの応募がツールに入って一覧で見える |
 | 2. 進捗管理 | ステータス変更、並べ替え、重複・再応募の印（付け直しを含む）、重複の解消、検索・まとめて変更、見送りの理由、XのIDの修正、同時変更の検知、履歴比較（前回分析した応募と）、分析メモ・アーカイブURL | 課題1・2が解決する |
 | 3. 画面とログイン | React管理画面のデザインの作り込み、ログイン・権限（v1.2 で外す） | 済み（PR #6、#7） |
-| 4. PCで動かす土台 | ログイン・権限・受付API・DynamoDB を外す。PostgreSQL に保存する（開発・テスト用の準備も）。127.0.0.1 でだけ待ち受ける。画面をツールの中から配信する | 1つのプログラムで、PCの中だけで動く |
+| 4. PCで動かす土台 | ログイン・権限・受付API・DynamoDB を外す。SQLite に保存する。127.0.0.1 でだけ待ち受ける。画面をツールの中から配信する | 1つのプログラムで、PCの中だけで動く |
 | 5. フォームの取り込み | Apps Script のウェブアプリ、取り込み（起動時・数分ごと・今すぐ）、取り込みの画面、秘密キーの設定 | フォームの回答がツールに入る |
-| 6. バックアップと配布 | 自動のバックアップ（pg_dump）と戻す画面、PostgreSQL を同梱した Windows のインストーラー（jpackage）、CIでの作成 | 配信者さんのPCに入れて使い始められる |
+| 6. バックアップと配布 | 自動のバックアップと戻す画面、Windows のインストーラー（jpackage）、CIでの作成 | 配信者さんのPCに入れて使い始められる |
 | 7. 配信 | 表示専用の配信用画面、配信の操作パネル（次の人へ・中断・元に戻す）、デザインの作り込み、匿名表示 | 配信で使える |
 | 8. 抽選 | まとめ抽選（確認画面）、配信中の抽選と締め、落選補正、記録、一番新しい抽選の取り消し | 応募が多くても回せる |
 | 9. 設定と取り込み | 条件ルール、選択肢、CSV取り込み、削除依頼の画面（確認・控えの削除手順の表示） | 運用を配信者さんに任せられる |
