@@ -29,6 +29,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
  *       Origin がない要求はブラウザ以外（同じPCのプログラム）からのものとして通す
  * </ol>
  *
+ * <p>あわせて、すべての応答に次のヘッダーを付ける（ログインがないので、画面を勝手に使われないようにするため）。
+ * <ul>
+ *   <li>{@code X-Frame-Options: DENY} と {@code Content-Security-Policy: frame-ancestors 'none'}:
+ *       ほかのサイトが、ツールの画面を自分のページの中（iframe）に透明にして重ね、配信者さんに削除などのボタンを
+ *       押させる攻撃（クリックジャッキング）を防ぐ。ツールの画面をほかのページの中に表示させない
+ *       （https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/X-Frame-Options ）
+ *   <li>{@code X-Content-Type-Options: nosniff}: ブラウザが、応答の種類（JSON など）を中身から勝手に推測しないようにする
+ * </ul>
+ *
  * <p>「フィルター」は、Spring がどのコントローラーで処理するかを決めるより前に、すべての要求に割り込む仕組み。
  * {@code @Component} を付けると、Spring Boot が自動でフィルターとして登録する。
  * {@code OncePerRequestFilter} は、1つの要求につき1回だけ呼ばれることを保証してくれる Spring の部品。
@@ -55,6 +64,10 @@ public class LocalAccessFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        // 断るときの応答にも付けるので、最初に付ける
+        response.setHeader("X-Frame-Options", "DENY");
+        response.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+        response.setHeader("X-Content-Type-Options", "nosniff");
         // getServerName() は、Host ヘッダーの「:」より前（ホスト名）を返す（Jakarta Servlet の決まり）
         if (!ALLOWED_HOST_NAMES.contains(request.getServerName().toLowerCase())) {
             reject(response, "このツールは、同じPCの http://127.0.0.1 から開いてください");

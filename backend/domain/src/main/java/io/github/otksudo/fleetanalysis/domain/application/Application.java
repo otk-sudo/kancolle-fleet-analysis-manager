@@ -204,7 +204,8 @@ public class Application {
             return;
         }
         String detail = reason == null ? null : "見送りの理由: " + reason.label();
-        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now, HistoryEntry.Kind.STATUS, status.code(), next.code(), joinNotes(note, detail)));
+        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now,
+                HistoryEntry.Kind.STATUS, status.code(), next.code(), joinNotes(note, detail)));
         this.status = next;
         this.skipReason = reason;
         this.updatedAt = now;
@@ -235,7 +236,8 @@ public class Application {
         if (next.equals(xId)) {
             return;
         }
-        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now, HistoryEntry.Kind.X_ID, xId.value(), next.value(), null));
+        pendingHistory.add(new HistoryEntry(UUID.randomUUID().toString(), now,
+                HistoryEntry.Kind.X_ID, xId.value(), next.value(), null));
         Map<String, Object> newAnswers = new LinkedHashMap<>(answers);
         newAnswers.put(AnswerKeys.X_ID, next.value());
         this.answers = Collections.unmodifiableMap(newAnswers);

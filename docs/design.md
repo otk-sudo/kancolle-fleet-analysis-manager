@@ -55,6 +55,7 @@
 - `Host` ヘッダー（どのアドレスあてに送ったか）が `127.0.0.1:<ポート>` か `localhost:<ポート>` でない要求は断る。DNSリバインディング（ほかのサイトが、自分の名前でこのPCのツールにつないでデータを読む攻撃）を防ぐため
 - データを変える要求（POST・PUT・PATCH・DELETE）は、`Origin` ヘッダー（どのサイトの画面から送ったか）がツール自身のときだけ受け付ける。CSRF（ほかのサイトが、裏で削除などの命令を送る攻撃）を防ぐため
 - 送る内容は JSON だけを受け付け、ほかのサイトからの呼び出しを許す CORS の設定はしない
+- すべての応答に `X-Frame-Options: DENY` と `Content-Security-Policy: frame-ancestors 'none'` を付け、ツールの画面をほかのページの中（iframe）に表示させない。ほかのサイトが画面を透明にして重ね、ボタンを押させる攻撃（クリックジャッキング）を防ぐため（公式: https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/X-Frame-Options ）
 
 ## 2. データモデル（DynamoDB 単一テーブル）
 

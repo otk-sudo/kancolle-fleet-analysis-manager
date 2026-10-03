@@ -126,7 +126,7 @@ paths:
     get:
       tags: [applications]
       operationId: listApplicationHistory
-      summary: 応募の変更履歴（ステータス・XのIDを、いつ・誰が・何から何へ変えたか）
+      summary: 応募の変更履歴（ステータス・XのIDを、いつ・何から何へ変えたか）
       responses:
         '403':
           $ref: '#/components/responses/ForbiddenOrigin'

@@ -11,6 +11,10 @@ export default defineConfig({
     // GitHub Codespaces で開くと https://<codespace名>-5173.app.github.dev のURLになるため、そのドメインを許可する。
     // 先頭の . は「このドメインとその下のすべてのサブドメイン」という意味（https://vite.dev/config/server-options）
     allowedHosts: ['.app.github.dev'],
+    // ほかのサイトから開発サーバーを呼べるようにする仕組み（CORS）を切る。
+    // Vite は何も書かないと、同じPCで動くほかのアプリの画面（http://localhost:<別のポート>）から、
+    // /api を通して応募データを読めてしまうため（https://vite.dev/config/server-options ）
+    cors: false,
     // 開発中だけの設定: 画面から /api/... へのリクエストを、手元で動かしているバックエンド（ポート8080）へ転送する。
     // バックエンドのURLには /api が付かないため、転送するときに取り除く。
     // 例: /api/applications → http://127.0.0.1:8080/applications

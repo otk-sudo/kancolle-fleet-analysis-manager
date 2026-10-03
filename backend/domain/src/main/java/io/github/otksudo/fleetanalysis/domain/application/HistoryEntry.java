@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * 応募の変更履歴1件（仕様 5.1「いつ・誰が・何から何へ」、5.6「変更前のXのIDを残す」）。
+ * 応募の変更履歴1件（仕様 5.1「いつ・何から何へ」。使う人は配信者さんだけなので「誰が」は残さない。5.6「変更前のXのIDを残す」）。
  *
  * <p>履歴は応募と一緒に保存する（{@link Application#pendingHistory()} を参照）。
  * あとから書き換えることはないので、変更できない record にしている。
