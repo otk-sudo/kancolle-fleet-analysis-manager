@@ -14,7 +14,7 @@
 |---|---|
 | `api/` | OpenAPI定義 |
 | `backend/domain/` | 業務ロジック（重複判定、条件ルール、抽選など）。SpringやAWSに依存しない |
-| `backend/infra/` | データの保存（今は DynamoDB とメモリ。仕様 v1.2 で PostgreSQL に変える） |
+| `backend/infra/` | データの保存（今は DynamoDB とメモリ。仕様 v1.2 で SQLite に変える） |
 | `backend/app/` | Spring Boot アプリ。OpenAPIから生成したインターフェースを実装する |
 | `frontend/` | React + TypeScript の管理画面・配信用画面 |
 | `gas/` | Googleフォーム連携用の Apps Script |
