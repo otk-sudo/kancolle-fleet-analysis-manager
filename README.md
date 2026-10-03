@@ -24,6 +24,15 @@
 - Java 21
 - Node.js 22
 
+## 試作版を動かす
+
+```sh
+./scripts/dev.sh   # Mac・Linux。サンプルデータ入りで起動し、http://localhost:5173 を開く
+scripts\dev.cmd    # Windows（エクスプローラーで dev.cmd をダブルクリックしてもよい）
+```
+
+GitHub Codespaces でも動きます（`.devcontainer/` に設定あり）。手順は [はじめに](docs/guide/はじめに.md) の5章。
+
 ## よく使うコマンド
 
 ```sh

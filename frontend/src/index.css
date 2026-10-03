@@ -1,22 +1,296 @@
+/* 画面全体の見た目。色は変数（--名前）にまとめ、ダークモードでは変数の値だけを入れ替える */
 :root {
   font-family: system-ui, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-  color: #1f2328;
-  background: #ffffff;
+  --fg: #1f2328;
+  --muted: #59636e;
+  --bg: #ffffff;
+  --surface: #f6f8fa;
+  --border: #d1d9e0;
+  --accent: #0969da;
+  --changed: #fff8c5;
+  --error: #cf222e;
+  --ok: #1a7f37;
+  color: var(--fg);
+  background: var(--bg);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    color: #e6edf3;
-    background: #0d1117;
+    --fg: #e6edf3;
+    --muted: #9198a1;
+    --bg: #0d1117;
+    --surface: #151b23;
+    --border: #3d444d;
+    --accent: #4493f8;
+    --changed: #3b2e00;
+    --error: #f85149;
+    --ok: #3fb950;
   }
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+}
+
+a {
+  color: var(--accent);
 }
 
 .app {
-  max-width: 960px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 16px;
+}
+
+/* 上のメニュー */
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.header .title {
+  font-weight: bold;
+}
+.header nav {
+  display: flex;
+  gap: 12px;
+}
+.header nav a {
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.header nav a.active {
+  background: var(--surface);
+  font-weight: bold;
+}
+.prototype-note {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+h1 small {
+  font-size: 0.6em;
+  color: var(--muted);
+}
+
+/* 絞り込み・入力欄 */
+.filters,
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 16px;
+}
+.form {
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 420px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+label.inline {
+  flex-direction: row;
+  align-items: center;
+}
+select,
+input,
+textarea,
+button {
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+button {
+  cursor: pointer;
+  background: var(--surface);
+}
+button.primary {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 表 */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+table.list thead th,
+table.answers thead th {
+  background: var(--surface);
+  font-size: 13px;
+}
+table.answers tbody th {
+  width: 11em;
+  font-weight: normal;
+  color: var(--muted);
+}
+tr.changed td,
+tr.changed th {
+  background: var(--changed);
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+/* ステータスや印の小さなラベル */
+.badge {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.status-analyzing {
+  background: #ddf4ff;
+  color: #0550ae;
+  border-color: #54aeff;
+}
+.status-scheduled {
+  background: #fff8c5;
+  color: #7d4e00;
+  border-color: #d4a72c;
+}
+.status-done {
+  background: #dafbe1;
+  color: #116329;
+  border-color: #4ac26b;
+}
+.status-lost,
+.status-skipped {
+  color: var(--muted);
+}
+.flag-duplicate {
+  background: #ffebe9;
+  color: #a40e26;
+  border-color: #ff8182;
+}
+.flag-reapply {
+  background: #fbefff;
+  color: #6e40c9;
+  border-color: #c297ff;
+}
+.flag-ineligible {
+  background: #fff1e5;
+  color: #953800;
+  border-color: #fb8f44;
+}
+.anonymous {
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+.flag-reason {
+  margin: 4px 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.error {
+  color: var(--error);
+}
+.ok {
+  color: var(--ok);
+}
+
+/* 2列のレイアウト（狭い画面では1列） */
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 24px;
+}
+@media (max-width: 800px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+details.lottery {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+details.lottery summary {
+  cursor: pointer;
+}
+
+/* 配信用画面: 遠くからでも読めるよう大きめの文字にする */
+.stream {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-size: 20px;
+}
+.stream-label {
+  color: var(--muted);
+  margin: 0;
+}
+.stream-name {
+  font-size: 48px;
+  margin: 8px 0 24px;
+}
+.stream-empty,
+.stream-drawing {
+  font-size: 40px;
+  text-align: center;
+  padding: 120px 0;
+}
+.stream-drawing {
+  animation: blink 0.6s ease-in-out infinite alternate;
+}
+@keyframes blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+.stream-note {
+  font-size: 14px;
+  color: var(--muted);
+}
+.stream-controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
 }

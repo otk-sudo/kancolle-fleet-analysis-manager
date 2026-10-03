@@ -1,0 +1,37 @@
+// GitHub Codespaces（クラウド上の開発環境）で、このリポジトリを開いたときの環境の設定。
+// Codespaces はこのファイルを読んで、Java 21 と Node.js 22 が入った環境を自動で用意する。
+// 書き方の公式リファレンス: https://containers.dev/implementors/json_reference/
+// （このファイルは「コメント付きJSON」として読まれるので、// のコメントを書ける）
+{
+  "name": "kancolle-fleet-analysis-manager",
+
+  // 土台にするコンテナイメージ。Microsoft が公開している Java 21 入りの開発用イメージ
+  // https://github.com/devcontainers/images/tree/main/src/java
+  "image": "mcr.microsoft.com/devcontainers/java:21",
+
+  // 追加で入れる道具（Feature）。画面のビルドに使う Node.js 22 を入れる（CI と同じ版）
+  // https://github.com/devcontainers/features/tree/main/src/node
+  "features": {
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "22"
+    }
+  },
+
+  // 環境ができた直後に1回だけ実行するコマンド。
+  // 画面の部品のインストールと、バックエンドの依存ライブラリのダウンロード（初回の起動を速くするため）を済ませておく
+  "postCreateCommand": "cd frontend && npm ci && cd .. && ./gradlew :backend:app:classes",
+
+  // 自分のブラウザから開けるようにするポート。
+  // 5173 = 画面（Vite の開発サーバー）。画面からAPIへの通信は Vite が中で 8080 に転送するので、8080 は開かなくてよい
+  "forwardPorts": [5173],
+  "portsAttributes": {
+    "5173": {
+      "label": "画面",
+      "onAutoForward": "openBrowser"
+    },
+    "8080": {
+      "label": "API（バックエンド）",
+      "onAutoForward": "silent"
+    }
+  }
+}

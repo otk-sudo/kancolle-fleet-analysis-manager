@@ -15,12 +15,18 @@ Java（Spring Boot）で作るサーバー側のプログラムです。3つの�
 2. `domain/src/test/java/.../domain/lottery/WeightedLotteryTest.java`: そのテスト。テストを読むと「何ができるか」がわかる
 3. `app/build.gradle.kts`: OpenAPI定義からコードを生成する設定
 4. `app/src/main/java/.../fleetanalysis/FleetAnalysisApplication.java`: アプリの起点
+5. `domain/.../application/ApplicationService.java`: 受付・一覧・ステータス変更など、応募管理の中心
+6. `app/.../app/web/ApplicationsController.java`: APIの入口。生成されたインターフェースを実装する例
+7. `app/.../app/config/ServiceConfig.java`: 部品（Bean）の組み立て
+
+試作版では、データを DynamoDB ではなくメモリに保存しています（`infra/.../infra/memory/`）。DynamoDB版は段階1で作ります。
 
 ## よく使うコマンド（リポジトリの一番上で実行）
 ```sh
 ./gradlew build                     # コード生成・コンパイル・テストをすべて実行
 ./gradlew :backend:domain:test      # domain のテストだけ実行
 ./gradlew :backend:app:bootRun      # アプリを起動（http://localhost:8080）
+./gradlew :backend:app:bootRun --args='--spring.profiles.active=demo'  # サンプルデータ入りで起動
 ```
 `./gradlew` は「Gradleラッパー」で、決められたバージョンのGradleを自動で用意して実行します。自分でGradleを入れる必要はありません。
 

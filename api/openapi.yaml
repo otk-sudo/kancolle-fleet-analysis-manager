@@ -185,6 +185,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
+  /stream/next:
+    post:
+      tags: [stream]
+      operationId: advanceStream
+      summary: 次の人へ進む（配信者・運営）
+      description: |
+        いま分析中の人を「分析済み」にし、「次に分析する順」の先頭の人を「分析中」にする。
+        分析予定の人はそのまま選び、未着手の人は重複・条件外の印があれば飛ばす。
+        抽選を使う設定のときは未着手の人を選ばない（抽選で選ぶため）。
+        次の人がいなければ、分析済みにするだけで current は null になる。
+      responses:
+        '200':
+          description: 進めた後の表示内容
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamView'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /lotteries:
     get:
       tags: [lotteries]

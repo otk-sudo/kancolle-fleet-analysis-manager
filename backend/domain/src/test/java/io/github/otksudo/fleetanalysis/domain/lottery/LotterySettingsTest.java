@@ -3,6 +3,7 @@ package io.github.otksudo.fleetanalysis.domain.lottery;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -30,7 +31,8 @@ class LotterySettingsTest {
     @ParameterizedTest
     @ValueSource(doubles = {-1.0, Double.NaN, Double.POSITIVE_INFINITY})
     void おかしな補正の強さは設定できない(double strength) {
+        // 設定画面から送られてくる値なので、APIで 400（入力の誤り）になる InvalidValueException にしている
         assertThatThrownBy(() -> new LotterySettings(true, true, strength))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidValueException.class);
     }
 }
