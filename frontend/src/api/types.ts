@@ -12,6 +12,8 @@ export type StreamApplicant = Schemas['StreamApplicant']
 export type Lottery = Schemas['Lottery']
 export type Settings = Schemas['Settings']
 export type ApiError = Schemas['ApiError']
+export type SkipReason = Schemas['SkipReason']
+export type HistoryEntry = Schemas['HistoryEntry']
 
 /** エラー応答から、画面に出すメッセージを取り出す。 */
 export function errorMessage(error: unknown): string {

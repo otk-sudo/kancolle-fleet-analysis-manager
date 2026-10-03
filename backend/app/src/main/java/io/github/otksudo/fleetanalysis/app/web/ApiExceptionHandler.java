@@ -6,6 +6,8 @@ import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.NotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -22,6 +24,15 @@ public class ApiExceptionHandler {
     @ExceptionHandler(InvalidValueException.class)
     public ResponseEntity<ApiError> handleInvalidValue(InvalidValueException e) {
         return error(HttpStatus.BAD_REQUEST, "invalid_value", e.getMessage());
+    }
+
+    /**
+     * 送られてきたJSONが読めない（形が違う、知らない値がある）、または必須の項目がないとき。
+     * 何もしないと Spring の標準のエラー応答になり、ほかのエラーと形がそろわないため、ここで ApiError にする。
+     */
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentNotValidException.class})
+    public ResponseEntity<ApiError> handleUnreadable(Exception e) {
+        return error(HttpStatus.BAD_REQUEST, "invalid_value", "送られてきた内容が正しくありません（必須の項目がない、値の形が違う、など）");
     }
 
     @ExceptionHandler(NotFoundException.class)

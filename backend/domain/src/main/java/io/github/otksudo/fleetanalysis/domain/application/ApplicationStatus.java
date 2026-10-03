@@ -40,21 +40,31 @@ public enum ApplicationStatus {
         return this == PENDING || this == SCHEDULED || this == ANALYZING;
     }
 
+    /** 「次に分析する人」の候補になるステータス（未着手・分析予定）か。仕様 5.4 */
+    public boolean isQueued() {
+        return this == PENDING || this == SCHEDULED;
+    }
+
     /**
-     * このステータスから {@code next} へ変更してよいか（仕様 5.1 のステータス遷移）。
+     * このステータスから {@code next} へ「手で」変えてよいか（仕様 5.1 の表）。
      *
      * <p>うっかり「分析済み」を「落選」にしてしまう、といった誤操作を防ぐために、変えてよい組み合わせを決めておく。
+     * 抽選・「次の人へ」・重複の解消など、仕組みが行う変更はこの表とは別に決まっている
+     * （{@link Application#changeStatusBySystem} を使う）。
+     * 「落選」は抽選でだけ付き、抽選の取り消しでだけ外れるので、手では付けることも外すこともできない。
+     * 手で付け外しできると、落選補正（仕様 6.3）の回数が実際の抽選とずれるため。
      */
     public boolean canChangeTo(ApplicationStatus next) {
         if (this == next) {
             return true;
         }
         Set<ApplicationStatus> allowed = switch (this) {
-            case PENDING -> Set.of(SCHEDULED, ANALYZING, SKIPPED, LOST);
+            case PENDING -> Set.of(SCHEDULED, ANALYZING, SKIPPED);
             case SCHEDULED -> Set.of(PENDING, ANALYZING, SKIPPED);
             case ANALYZING -> Set.of(PENDING, SCHEDULED, DONE);
             case DONE -> Set.of(ANALYZING); // 間違えて「分析済み」にしたときに戻せるように
-            case SKIPPED, LOST -> Set.of(PENDING); // 判断を取り消して未着手に戻す
+            case SKIPPED -> Set.of(PENDING); // 判断を取り消して未着手に戻す
+            case LOST -> Set.of(); // 抽選の取り消しでだけ外れる（段階6）
         };
         return allowed.contains(next);
     }

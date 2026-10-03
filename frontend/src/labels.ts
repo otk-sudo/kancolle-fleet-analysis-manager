@@ -2,7 +2,7 @@
 // APIではステータスや項目を英語のコード（例: "pending"）でやりとりし、画面に出すときだけ日本語に直す。
 // TODO(段階7): ステータスや項目は設定データから読み込む（仕様 10章）。試作では固定の表にしている
 
-import type { FlagType } from './api/types'
+import type { FlagType, SkipReason } from './api/types'
 
 /** ステータスのコード → 表示名 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -15,16 +15,31 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 
 /**
- * 今のステータスから変更できるステータス（backend の ApplicationStatus.canChangeTo と同じ表）。
+ * 今のステータスから「手で」変更できるステータス（仕様 5.1 の表。backend の ApplicationStatus.canChangeTo と同じ）。
  * 画面では変えられないものを選べないようにするだけで、最終的な確認はバックエンドが行う。
+ * 「落選」は抽選でだけ付くので、手では付けることも外すこともできない。
  */
 export const NEXT_STATUSES: Record<string, string[]> = {
-  pending: ['scheduled', 'analyzing', 'skipped', 'lost'],
+  pending: ['scheduled', 'analyzing', 'skipped'],
   scheduled: ['pending', 'analyzing', 'skipped'],
   analyzing: ['pending', 'scheduled', 'done'],
   done: ['analyzing'],
   skipped: ['pending'],
-  lost: ['pending'],
+  lost: [],
+}
+
+/** まとめて変更できるステータス（分析中・分析済みは1人ずつ確かめて変えるので、まとめては変えない） */
+export const BULK_STATUSES = ['pending', 'scheduled', 'skipped']
+
+/** まとめて変えられる最大の件数（backend の ApplicationService.BULK_LIMIT と同じ） */
+export const BULK_LIMIT = 25
+
+/** 見送りの理由（仕様 5.6） */
+export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
+  resubmitted: '重複（再送のため）',
+  ineligible: '条件外',
+  withdrawn: '本人の取り下げ',
+  other: 'その他（メモに書く）',
 }
 
 export const FLAG_LABELS: Record<FlagType, string> = {
@@ -54,6 +69,9 @@ export const ANSWER_LABELS: Record<string, string> = {
 
 /** 分析してほしい目的の選択肢（一覧の絞り込みに使う。仕様 4.2 の項目14） */
 export const PURPOSES = ['イベント', '通常海域', '演習', '全体的な育成方針', 'その他']
+
+/** 戦果への取り組みの選択肢（一覧の絞り込みに使う。仕様 4.2 の項目10） */
+export const RANKING_EFFORTS = ['戦果やらない', 'クォータリー3群', '継続3群', '継続2群', '継続1群', '継続聯合', 'その他']
 
 /** 日時を「2026/10/02 12:34」の形にする */
 export function formatDateTime(value: string): string {

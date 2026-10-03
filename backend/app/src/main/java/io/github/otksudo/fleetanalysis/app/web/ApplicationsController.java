@@ -5,10 +5,18 @@ import io.github.otksudo.fleetanalysis.app.api.ApplicationsApi;
 import io.github.otksudo.fleetanalysis.app.api.model.Application;
 import io.github.otksudo.fleetanalysis.app.api.model.ApplicationPage;
 import io.github.otksudo.fleetanalysis.app.api.model.ApplicationUpdate;
+import io.github.otksudo.fleetanalysis.app.api.model.BulkStatusRequest;
+import io.github.otksudo.fleetanalysis.app.api.model.BulkStatusResponse;
 import io.github.otksudo.fleetanalysis.app.api.model.FlagType;
+import io.github.otksudo.fleetanalysis.app.api.model.HistoryEntry;
+import io.github.otksudo.fleetanalysis.app.api.model.KeepRequest;
 import io.github.otksudo.fleetanalysis.app.api.model.MoveApplicationRequest;
+import io.github.otksudo.fleetanalysis.app.api.model.SkipReason;
+import io.github.otksudo.fleetanalysis.app.api.model.VersionedId;
 import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.XId;
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationChanges;
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationFilter;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationStatus;
 import java.util.ArrayList;
@@ -35,7 +43,14 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
 
     @Override
     public ResponseEntity<ApplicationPage> listApplications(
-            List<String> status, String purpose, FlagType flag, String order, String cursor, Integer limit) {
+            List<String> status,
+            String purpose,
+            String rankingEffort,
+            String q,
+            FlagType flag,
+            String order,
+            String cursor,
+            Integer limit) {
         List<ApplicationStatus> statuses = new ArrayList<>();
         if (status != null) {
             for (String code : status) {
@@ -44,11 +59,11 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
         }
         io.github.otksudo.fleetanalysis.domain.application.FlagType domainFlag =
                 flag == null ? null : io.github.otksudo.fleetanalysis.domain.application.FlagType.fromCode(flag.getValue());
-        List<io.github.otksudo.fleetanalysis.domain.application.Application> all =
-                applicationService.list(statuses, purpose, domainFlag, order);
+        List<io.github.otksudo.fleetanalysis.domain.application.Application> all = applicationService.list(
+                new ApplicationFilter(statuses, purpose, rankingEffort, domainFlag, q), order);
 
-        // ページ分け。試作では「何件目から」を cursor として渡すわかりやすい方法をとる
-        // TODO(段階1): DynamoDB版では、DynamoDBが返す「続きの位置」を cursor にする
+        // ページ分け。「何件目から」を cursor として渡すわかりやすい方法をとる。
+        // 応募は数千件までの想定で、一覧は毎回全件を並べ替えてから切り出す（design.md 2章「規模の想定」）
         int start = parseCursor(cursor);
         int end = Math.min(start + limit, all.size());
         List<Application> items = start < all.size() ? ApiMapper.toApi(all.subList(start, end)) : List.of();
@@ -63,11 +78,45 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
 
     @Override
     public ResponseEntity<Application> updateApplication(String applicationId, ApplicationUpdate update) {
-        ApplicationStatus status = update.getStatus() == null ? null : ApplicationStatus.fromCode(update.getStatus());
-        // TODO(段階2): 「配信日を消す」と「配信日を変えない」をJSONで区別できるようにする。
-        // 今の生成コードではどちらも null になるため、試作では null を「変えない」として扱う
-        var updated = applicationService.update(applicationId, status, update.getStreamDate(), false, update.getMemo());
+        ApplicationChanges changes = ApplicationChanges.none()
+                .withStatus(update.getStatus() == null ? null : ApplicationStatus.fromCode(update.getStatus()))
+                .withSkipReason(toDomain(update.getSkipReason()))
+                .withStreamDate(update.getStreamDate())
+                .withMemo(update.getMemo())
+                .withAnalysisMemo(update.getAnalysisMemo())
+                .withArchiveUrl(update.getArchiveUrl())
+                .withXId(update.getxId());
+        // 「配信日を消す」は、null（変えない）と区別するため clearStreamDate で受け取る
+        if (Boolean.TRUE.equals(update.getClearStreamDate())) {
+            changes = changes.withClearStreamDate();
+        }
+        var updated = applicationService.update(applicationId, update.getVersion(), changes, Actors.current());
         return ResponseEntity.ok(ApiMapper.toApi(updated));
+    }
+
+    @Override
+    public ResponseEntity<List<HistoryEntry>> listApplicationHistory(String applicationId) {
+        return ResponseEntity.ok(ApiMapper.toApiHistory(applicationService.history(applicationId)));
+    }
+
+    @Override
+    public ResponseEntity<Application> keepApplication(String applicationId, KeepRequest request) {
+        var kept = applicationService.keep(applicationId, request.getVersion(), Actors.current());
+        return ResponseEntity.ok(ApiMapper.toApi(kept));
+    }
+
+    @Override
+    public ResponseEntity<BulkStatusResponse> bulkChangeStatus(BulkStatusRequest request) {
+        List<ApplicationService.VersionedId> targets = new ArrayList<>();
+        for (VersionedId item : request.getItems()) {
+            targets.add(new ApplicationService.VersionedId(item.getId(), item.getVersion()));
+        }
+        var updated = applicationService.bulkChangeStatus(
+                targets,
+                ApplicationStatus.fromCode(request.getStatus()),
+                toDomain(request.getSkipReason()),
+                Actors.current());
+        return ResponseEntity.ok(new BulkStatusResponse(ApiMapper.toApi(updated)));
     }
 
     @Override
@@ -79,7 +128,7 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
 
     @Override
     public ResponseEntity<List<Application>> listApplicantHistory(String xId) {
-        return ResponseEntity.ok(ApiMapper.toApi(applicationService.history(XId.parse(xId))));
+        return ResponseEntity.ok(ApiMapper.toApi(applicationService.sameApplicant(XId.parse(xId))));
     }
 
     @Override
@@ -87,6 +136,10 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
         // TODO(段階3): ログインができたら、運営だけが実行できるように権限を確認する（仕様 2章）
         applicationService.deleteApplicant(XId.parse(xId));
         return ResponseEntity.noContent().build();
+    }
+
+    private static io.github.otksudo.fleetanalysis.domain.application.SkipReason toDomain(SkipReason reason) {
+        return reason == null ? null : io.github.otksudo.fleetanalysis.domain.application.SkipReason.fromCode(reason.getValue());
     }
 
     private static int parseCursor(String cursor) {

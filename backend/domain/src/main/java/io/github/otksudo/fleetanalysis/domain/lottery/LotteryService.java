@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,22 +83,38 @@ public class LotteryService {
         long seed = seedSource.nextLong();
         Set<String> winnerIds = new HashSet<>(WeightedLottery.draw(entries, winnerCount, seed));
 
-        // 結果に合わせてステータスを変える
+        // 結果に合わせてステータスを変える（抽選は仕組みが行う変更なので、手で変えるときの表は使わない。仕様 5.1）
         Instant now = clock.instant();
+        Map<String, Application> changed = new LinkedHashMap<>();
+        Set<XId> affected = new HashSet<>();
         List<LotteryRecord.Entry> recordEntries = new ArrayList<>();
+        long lastScheduled = lastScheduledPosition();
         for (Application candidate : candidates) {
             boolean won = winnerIds.contains(candidate.id());
             if (won) {
                 candidate.markWonLottery();
-                candidate.changeStatus(mode == LotteryMode.LIVE ? ApplicationStatus.ANALYZING : ApplicationStatus.SCHEDULED, now);
+                candidate.changeStatusBySystem(
+                        mode == LotteryMode.LIVE ? ApplicationStatus.ANALYZING : ApplicationStatus.SCHEDULED,
+                        null, now, executedBy, "抽選で当選");
                 // 「分析予定」の最後尾に並べる（candidates は受付順なので、当選者どうしは受付順になる）
-                ApplicationService.placeAtEndOfGroup(applications, candidate);
+                lastScheduled += 1000;
+                candidate.changePosition(lastScheduled);
+                changed.put(candidate.id(), candidate);
+                affected.add(candidate.xId());
             } else if (mode == LotteryMode.BULK) {
-                candidate.changeStatus(ApplicationStatus.LOST, now);
+                candidate.changeStatusBySystem(ApplicationStatus.LOST, null, now, executedBy, "抽選で落選");
+                changed.put(candidate.id(), candidate);
+                affected.add(candidate.xId());
             }
-            applications.save(candidate);
             recordEntries.add(new LotteryRecord.Entry(candidate.id(), weights.get(candidate.id()), won));
         }
+        // 抽選でステータスが変わった人の、ほかの応募の印を付け直す（例: 落選した応募の後に送られた応募は「重複」から「再応募」へ）
+        ApplicationService.refreshFlags(applications, affected, changed);
+        for (Application application : changed.values()) {
+            applications.save(application);
+        }
+        // TODO(段階6): 抽選の対象者は数百人になることがあり、1回のトランザクション（最大100件）に収まらないため、
+        // 今は1件ずつ保存している。途中で失敗したときに記録と食い違わないよう、抽選の取り消しと合わせて見直す
 
         LotteryRecord record = new LotteryRecord(UUID.randomUUID().toString(), mode, now, executedBy, seed, recordEntries);
         lotteries.save(record);
@@ -131,6 +148,17 @@ public class LotteryService {
         return result;
     }
 
+    /** 「分析予定」のグループの最後尾の並び順。誰もいなければ 0 */
+    private long lastScheduledPosition() {
+        long last = 0;
+        for (Application application : applications.findAll()) {
+            if (application.status() == ApplicationStatus.SCHEDULED && application.position() > last) {
+                last = application.position();
+            }
+        }
+        return last;
+    }
+
     private boolean someoneAnalyzing() {
         for (Application application : applications.findAll()) {
             if (application.status() == ApplicationStatus.ANALYZING) {
@@ -143,7 +171,7 @@ public class LotteryService {
     /**
      * 最後に当選してからの落選回数（仕様 6.3）。
      * 同じXのIDの過去の応募を古い順に見ていき、当選があれば0に戻し、落選なら1足す。
-     * 試作では、手で「落選」にした応募も落選として数える。
+     * 「落選」は抽選でだけ付く（手では付けられない。仕様 5.1）ので、実際の抽選の回数と一致する。
      * 抽選画面で「当たりやすさ」の根拠を確かめられるよう、またテストから直接確かめられるよう public にしている。
      */
     public int lossesSinceLastWin(Application candidate) {

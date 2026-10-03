@@ -17,6 +17,8 @@ public final class AnswerKeys {
     public static final String SIMULATOR_URL = "simulatorUrl";
     public static final String MONTHLY_SPENDING = "monthlySpending";
     public static final String PURPOSE = "purpose";
+    /** 戦果への取り組み（一覧の絞り込みに使う） */
+    public static final String RANKING_EFFORT = "rankingEffort";
 
     /** 匿名を希望するときの回答 */
     public static final String ANONYMOUS_ANSWER = "匿名希望";
@@ -29,7 +31,7 @@ public final class AnswerKeys {
             "startedAt",
             "activePeriod",
             "dailyPlayTime",
-            "rankingEffort",
+            RANKING_EFFORT,
             "rankingEffortOther",
             "hasRestrictions",
             "restrictions",

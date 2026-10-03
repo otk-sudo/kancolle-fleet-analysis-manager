@@ -1,10 +1,12 @@
 package io.github.otksudo.fleetanalysis.app.demo;
 
 import io.github.otksudo.fleetanalysis.domain.application.Application;
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationChanges;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationStatus;
 import io.github.otksudo.fleetanalysis.domain.application.IntakeCommand;
+import io.github.otksudo.fleetanalysis.domain.application.SkipReason;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,6 +36,8 @@ public class DemoDataLoader implements ApplicationRunner {
 
     private static final String SIMULATOR_URL = "https://noro6.github.io/kc-web/#/";
     private static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
+    /** サンプルの変更を行った人として履歴に残す名前 */
+    private static final String ACTOR = "サンプルデータ";
 
     private final ApplicationService applicationService;
     private final ApplicationRepository repository;
@@ -57,6 +61,11 @@ public class DemoDataLoader implements ApplicationRunner {
         Application past = submit(60, "demo_teitoku01", "朝霧", false, "1〜3年", "〜3,000円", "継続3群", "イベント",
                 "E-3甲を突破したい", null);
         changeStatus(past, ApplicationStatus.ANALYZING, ApplicationStatus.DONE);
+        // 分析済みにしたときの分析メモとアーカイブURL（次に同じ人を分析するときに振り返れる。仕様 5.5）
+        Application analyzed = applicationService.get(past.id());
+        applicationService.update(past.id(), analyzed.version(), ApplicationChanges.none()
+                .withAnalysisMemo("基地航空隊の熟練度が低め。陸攻の数を増やすと楽になる")
+                .withArchiveUrl("https://www.youtube.com/watch?v=example&t=1234"), ACTOR);
         Application current = submit(3, "demo_teitoku01", "朝霧", false, "3〜5年", "〜5,000円", "継続2群", "イベント",
                 "次のイベントで全海域甲を目指したい", "前回のアドバイスで基地航空隊を見直しました");
         changeStatus(current, ApplicationStatus.ANALYZING);
@@ -65,7 +74,8 @@ public class DemoDataLoader implements ApplicationRunner {
         Application scheduled1 = submit(10, "demo_teitoku02", "夕凪", true, "半年〜1年", "0円", "戦果やらない", "全体的な育成方針",
                 "まずは改二を増やしたい", null);
         changeStatus(scheduled1, ApplicationStatus.SCHEDULED);
-        applicationService.update(scheduled1.id(), null, LocalDate.now(clock.withZone(JAPAN)).plusDays(3), false, null);
+        applicationService.update(scheduled1.id(), applicationService.get(scheduled1.id()).version(),
+                ApplicationChanges.none().withStreamDate(LocalDate.now(clock.withZone(JAPAN)).plusDays(3)), ACTOR);
         Application scheduled2 = submit(9, "demo_teitoku03", "白露", false, "5〜10年", "〜10,000円", "継続1群", "演習",
                 "演習で勝率を上げたい", null);
         changeStatus(scheduled2, ApplicationStatus.SCHEDULED);
@@ -84,12 +94,14 @@ public class DemoDataLoader implements ApplicationRunner {
 
         // 前回は抽選で落選した人が、もう一度応募している（落選補正で当たりやすくなる）
         Application lost = submit(40, "demo_teitoku10", "雪風", false, "3〜5年", "〜5,000円", "継続3群", "イベント", "初めての甲作戦", null);
-        changeStatus(lost, ApplicationStatus.LOST);
+        markLost(lost);
         submit(1, "demo_teitoku10", "雪風", false, "3〜5年", "〜5,000円", "継続3群", "イベント", "今度こそ甲作戦", null);
 
         // 見送り
         Application skipped = submit(20, "demo_teitoku11", "天霧", false, "1〜3年", "0円", "戦果やらない", "通常海域", "1-5のクリア", null);
-        changeStatus(skipped, ApplicationStatus.SKIPPED);
+        Application skippedNow = applicationService.get(skipped.id());
+        applicationService.update(skipped.id(), skippedNow.version(), ApplicationChanges.none()
+                .withStatus(ApplicationStatus.SKIPPED).withSkipReason(SkipReason.WITHDRAWN), ACTOR);
     }
 
     private Application submit(
@@ -129,7 +141,18 @@ public class DemoDataLoader implements ApplicationRunner {
     /** 許された順番でステータスを変えていく（例: 未着手 → 分析中 → 分析済み） */
     private void changeStatus(Application application, ApplicationStatus... steps) {
         for (ApplicationStatus step : steps) {
-            applicationService.update(application.id(), step, null, false, null);
+            long version = applicationService.get(application.id()).version();
+            applicationService.update(application.id(), version, ApplicationChanges.none().withStatus(step), ACTOR);
         }
+    }
+
+    /**
+     * 抽選で落選したことにする。「落選」は抽選でだけ付き、手では付けられない（仕様 5.1）ので、
+     * サンプルでは抽選と同じ「仕組みが行う変更」で付ける。
+     */
+    private void markLost(Application application) {
+        Application loaded = applicationService.get(application.id());
+        loaded.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), ACTOR, "抽選で落選（サンプル）");
+        repository.save(loaded);
     }
 }

@@ -9,12 +9,15 @@ import static io.github.otksudo.fleetanalysis.infra.dynamodb.AttributeValues.put
 import static io.github.otksudo.fleetanalysis.infra.dynamodb.AttributeValues.s;
 
 import io.github.otksudo.fleetanalysis.domain.ConflictException;
+import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.XId;
 import io.github.otksudo.fleetanalysis.domain.application.Application;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationRepository;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationStatus;
 import io.github.otksudo.fleetanalysis.domain.application.Flag;
 import io.github.otksudo.fleetanalysis.domain.application.FlagType;
+import io.github.otksudo.fleetanalysis.domain.application.HistoryEntry;
+import io.github.otksudo.fleetanalysis.domain.application.SkipReason;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -34,11 +37,13 @@ import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledExcepti
 /**
  * 応募を DynamoDB に保存する {@link ApplicationRepository} の実装。
  *
- * <p>応募1件につき、次の2つのアイテムを保存する。
+ * <p>応募1件につき、次のアイテムを保存する。
  * <ul>
  *   <li>応募本体: PK = {@code APP#応募ID}、SK = {@code META}
  *   <li>回答IDの控え: PK = {@code SUB#フォームの回答ID}、SK = {@code META}。中身は応募IDだけ。
- *       「同じ回答IDで2件登録しない」ことを DynamoDB に守らせるために使う（下の save を参照）
+ *       「同じ回答IDで2件登録しない」ことを DynamoDB に守らせるために使う（下の saveAll を参照）
+ *   <li>変更履歴: PK = {@code APP#応募ID}、SK = {@code HISTORY#日時#履歴ID}。ステータスやXのIDを変えるたびに1件増える。
+ *       応募本体と同じ PK にしておくと、「この応募の履歴」を1回の読み込み（Query）でまとめて取れる
  * </ul>
  *
  * <p>注意: GSI（索引）からの読み込みは「結果整合性」で、保存した直後（1秒未満）はまだ索引に反映されていないことがある
@@ -46,11 +51,12 @@ import software.amazon.awssdk.services.dynamodb.model.TransactionCanceledExcepti
  * 索引に載っている中身をそのまま使うと、直前に変えたステータスが古いまま見え、それを保存し直して変更を消してしまう。
  * そこで findAll と findByXId は、索引では「どの応募があるか（キー）」だけを調べ、中身は強い整合性で読み直す。
  * それでも、保存した直後の「新しい応募」が一覧に出てこないことはまれにある（索引にまだ載っていないため）。
- * TODO(段階2): 応募に版を持たせ、古い内容での上書きを条件付き書き込みで断る（仕様 5.1 の同時変更の検知）
+ * 古い内容での上書きは、版（version）を使った条件付き書き込みで断る（saveAll を参照）。
  */
 public class DynamoDbApplicationRepository implements ApplicationRepository {
 
     private static final String META = "META";
+    private static final String HISTORY_PREFIX = "HISTORY#";
 
     private final DynamoDbClient client;
     private final String tableName;
@@ -61,40 +67,112 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
     }
 
     /**
-     * 応募を保存する。
+     * DynamoDB の1回のトランザクションに入れられる書き込みの最大数。
+     * 公式: https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_TransactWriteItems.html
+     */
+    private static final int TRANSACTION_LIMIT = 100;
+
+    /**
+     * 応募をまとめて保存する。全部保存できるか、1件も保存しないか（トランザクション）。
      *
-     * <p>「トランザクション」（全部成功するか、全部失敗するか）で、応募本体と回答IDの控えを一緒に書く。
-     * 回答IDの控えには「まだないか、あっても同じ応募IDのときだけ書く」という条件をつける。
-     * 別の応募IDで控えがすでにあれば（同じ回答が同時に2回届いた場合）、全部を取りやめて ConflictException にする。
-     *
-     * <p>控えは、上書き保存（ステータスの変更など）のたびにも書き直している。新規か上書きかを見分ける手間を省くためで、
-     * 書き込みの量は2倍になるが、応募数（数千件）の規模なら料金への影響は小さい。
+     * <p>応募ごとに、次の書き込みを1つのトランザクションに入れる。
+     * <ul>
+     *   <li>応募本体。新しい応募（版0）なら「まだないときだけ」、保存済みなら「保存されている版が読み込んだときと同じときだけ」
+     *       書く（条件付き書き込み）。書くときは版を1つ増やす。誰かが先に保存していれば版が違うので断られ、
+     *       相手の変更を消さずに済む（仕様 5.1 の同時変更の検知）
+     *   <li>回答IDの控え（新しい応募のときだけ）。「まだないか、あっても同じ応募IDのときだけ書く」という条件をつける。
+     *       別の応募IDで控えがすでにあれば（同じ回答が同時に2回届いた場合）、全部を取りやめる
+     *   <li>まだ保存していない変更履歴
+     * </ul>
+     * 条件に合わなければ ConflictException にする。
      * なお、同じアイテムへの別のトランザクションと同時になると DynamoDB が取りやめる（TransactionConflict）ことがあり、
-     * そのときは例外がそのまま上に伝わる（画面には「失敗したのでやり直してください」が出る）。
+     * そのときも ConflictException にする（画面には「もう一度お試しください」が出る）。
      */
     @Override
-    public void save(Application application) {
-        TransactWriteItem putApplication = TransactWriteItem.builder()
-                .put(p -> p.tableName(tableName).item(toItem(application)))
+    public void saveAll(List<Application> applications) {
+        List<TransactWriteItem> items = new ArrayList<>();
+        // 何番目の書き込みが何だったか（断られたときに、理由を分けて伝えるため）
+        List<String> kinds = new ArrayList<>();
+        for (Application application : applications) {
+            items.add(putApplication(application));
+            kinds.add("application");
+            if (application.version() == 0) {
+                items.add(putSubmission(application));
+                kinds.add("submission");
+            }
+            for (HistoryEntry entry : application.pendingHistory()) {
+                items.add(TransactWriteItem.builder()
+                        .put(p -> p.tableName(tableName).item(toHistoryItem(application.id(), entry)))
+                        .build());
+                kinds.add("history");
+            }
+        }
+        if (items.size() > TRANSACTION_LIMIT) {
+            throw new InvalidValueException("一度に保存できる数を超えました。件数を減らしてやり直してください");
+        }
+        try {
+            client.transactWriteItems(t -> t.transactItems(items));
+        } catch (TransactionCanceledException e) {
+            throw toConflict(e, kinds);
+        }
+        for (Application application : applications) {
+            application.markSaved();
+        }
+    }
+
+    private TransactWriteItem putApplication(Application application) {
+        long version = application.version();
+        Map<String, AttributeValue> item = toItem(application, version + 1);
+        if (version == 0) {
+            // attribute_not_exists(PK): このキーのアイテムがまだない（新しい応募）
+            return TransactWriteItem.builder()
+                    .put(p -> p.tableName(tableName).item(item).conditionExpression("attribute_not_exists(PK)"))
+                    .build();
+        }
+        // 版が読み込んだときと同じときだけ書く。
+        // 段階1で保存した応募には版がない（読み込むと版1になる）ので、版1のときは「版がない」場合も許す
+        String condition = version == 1
+                ? "attribute_exists(PK) AND (version = :v OR attribute_not_exists(version))"
+                : "version = :v";
+        return TransactWriteItem.builder()
+                .put(p -> p.tableName(tableName).item(item)
+                        .conditionExpression(condition)
+                        .expressionAttributeValues(Map.of(":v", n(version))))
                 .build();
-        TransactWriteItem putSubmission = TransactWriteItem.builder()
+    }
+
+    private TransactWriteItem putSubmission(Application application) {
+        return TransactWriteItem.builder()
                 .put(p -> p.tableName(tableName)
                         .item(Map.of(
                                 MainTable.PK, s(submissionKey(application.submissionId())),
                                 MainTable.SK, s(META),
                                 "applicationId", s(application.id())))
-                        // attribute_not_exists(PK): このキーのアイテムがまだない
+                        // まだないか、あっても同じ応募IDのときだけ書く
                         .conditionExpression("attribute_not_exists(PK) OR applicationId = :id")
                         .expressionAttributeValues(Map.of(":id", s(application.id()))))
                 .build();
-        try {
-            client.transactWriteItems(t -> t.transactItems(putApplication, putSubmission));
-        } catch (TransactionCanceledException e) {
-            if (isConditionFailed(e)) {
-                throw new ConflictException("同じフォームの回答がすでに別の応募として登録されています");
+    }
+
+    /** トランザクションが取りやめになった理由を見て、画面に出す説明つきの ConflictException にする。 */
+    private static RuntimeException toConflict(TransactionCanceledException e, List<String> kinds) {
+        List<CancellationReason> reasons = e.cancellationReasons();
+        // 理由は書き込みと同じ順に並んで返ってくる
+        for (int i = 0; i < reasons.size() && i < kinds.size(); i++) {
+            if ("ConditionalCheckFailed".equals(reasons.get(i).code())) {
+                if ("submission".equals(kinds.get(i))) {
+                    return new ConflictException("同じフォームの回答がすでに別の応募として登録されています");
+                }
+                return new ConflictException(
+                        "ほかの人が先にこの応募を変更しました。画面を読み込み直してから、もう一度変更してください");
             }
-            throw e;
         }
+        for (CancellationReason reason : reasons) {
+            if ("TransactionConflict".equals(reason.code())) {
+                return new ConflictException("ほかの操作と重なったため保存できませんでした。もう一度お試しください");
+            }
+        }
+        return e;
     }
 
     @Override
@@ -143,17 +221,54 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
                 .build());
     }
 
+    @Override
+    public List<HistoryEntry> findHistory(String applicationId) {
+        List<HistoryEntry> result = new ArrayList<>();
+        for (Map<String, AttributeValue> item : queryHistory(applicationId, false)) {
+            result.add(fromHistoryItem(item));
+        }
+        return result;
+    }
+
     /**
-     * 同じXのIDの応募を、回答IDの控えも含めて消す（仕様 8.1 削除依頼への対応）。
+     * 応募の変更履歴のアイテムを、SK の順（＝日時の順）に読む。
      *
-     * <p>応募本体と回答IDの控えは、トランザクションで一緒に消す。片方だけ残ると、
+     * @param keysOnly true ならキー（PK・SK）だけを読む（消すときに使う）
+     */
+    private List<Map<String, AttributeValue>> queryHistory(String applicationId, boolean keysOnly) {
+        // begins_with(SK, :prefix): SK が "HISTORY#" で始まるアイテムだけ
+        QueryRequest.Builder request = QueryRequest.builder()
+                .tableName(tableName)
+                .keyConditionExpression("PK = :pk AND begins_with(SK, :prefix)")
+                .expressionAttributeValues(Map.of(
+                        ":pk", s(applicationKey(applicationId)),
+                        ":prefix", s(HISTORY_PREFIX)))
+                .consistentRead(true);
+        if (keysOnly) {
+            request.projectionExpression("PK, SK");
+        }
+        List<Map<String, AttributeValue>> items = new ArrayList<>();
+        client.queryPaginator(request.build()).items().forEach(items::add);
+        return items;
+    }
+
+    /**
+     * 同じXのIDの応募を、回答IDの控えと変更履歴も含めて消す（仕様 8.1 削除依頼への対応）。
+     *
+     * <p>変更履歴には変更前のXのIDが残っていることがあるので、一緒に消す。
+     * 履歴は先に消す（応募本体が先に消えると、途中で失敗したときに履歴だけが残り、探せなくなるため）。
+     * 応募本体と回答IDの控えは、トランザクションで一緒に消す。片方だけ残ると、
      * 控えだけが残った回答をあとで再送したときに、ずっと「登録済み」扱いで断られてしまうため。
      *
-     * <p>TODO(段階6): ステータス履歴（STATUS#）と、抽選記録の中の応募IDの置き換え（「削除済み」にする）も行う。
+     * <p>TODO(段階6): 抽選記録の中の応募IDの置き換え（「削除済み」にする）も行う。
      */
     @Override
     public void deleteByXId(XId xId) {
         for (Application application : findByXId(xId)) {
+            for (Map<String, AttributeValue> item : queryHistory(application.id(), true)) {
+                Map<String, AttributeValue> key = Map.of(MainTable.PK, item.get(MainTable.PK), MainTable.SK, item.get(MainTable.SK));
+                client.deleteItem(d -> d.tableName(tableName).key(key));
+            }
             client.transactWriteItems(t -> t.transactItems(
                     TransactWriteItem.builder()
                             .delete(d -> d.tableName(tableName).key(key(applicationKey(application.id()))))
@@ -216,7 +331,7 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
 
     // ---- Java の Application と DynamoDB のアイテムの変換 ----
 
-    private static Map<String, AttributeValue> toItem(Application application) {
+    private static Map<String, AttributeValue> toItem(Application application, long newVersion) {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put(MainTable.PK, s(applicationKey(application.id())));
         item.put(MainTable.SK, s(META));
@@ -241,12 +356,16 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
         item.put("receivedAt", s(application.receivedAt().toString()));
         item.put("flags", AttributeValue.fromL(application.flags().stream().map(DynamoDbApplicationRepository::toFlagValue).toList()));
         item.put("status", s(application.status().code()));
+        putIfNotNull(item, "skipReason", application.skipReason() == null ? null : application.skipReason().code());
         putIfNotNull(item, "streamDate", application.streamDate() == null ? null : application.streamDate().toString());
         putIfNotNull(item, "memo", application.memo());
+        putIfNotNull(item, "analysisMemo", application.analysisMemo());
+        putIfNotNull(item, "archiveUrl", application.archiveUrl());
         item.put("position", n(application.position()));
         item.put("wonLottery", bool(application.wonLottery()));
         item.put("updatedAt", s(application.updatedAt().toString()));
         item.put("statusChangedAt", s(application.statusChangedAt().toString()));
+        item.put("version", n(newVersion));
         return item;
     }
 
@@ -256,6 +375,9 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
             flags.add(fromFlagValue(flag));
         }
         String streamDate = getS(item, "streamDate");
+        String skipReason = getS(item, "skipReason");
+        // 段階1で保存した応募には版がないので、版1として扱う
+        long version = item.containsKey("version") ? getLong(item, "version") : 1;
         return Application.restore(
                 getS(item, "id"),
                 getS(item, "submissionId"),
@@ -269,12 +391,43 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
                 flags,
                 new Application.State(
                         ApplicationStatus.fromCode(getS(item, "status")),
+                        skipReason == null ? null : SkipReason.fromCode(skipReason),
                         streamDate == null ? null : LocalDate.parse(streamDate),
                         getS(item, "memo"),
+                        getS(item, "analysisMemo"),
+                        getS(item, "archiveUrl"),
                         getLong(item, "position"),
                         getBool(item, "wonLottery"),
                         Instant.parse(getS(item, "updatedAt")),
-                        Instant.parse(getS(item, "statusChangedAt"))));
+                        Instant.parse(getS(item, "statusChangedAt")),
+                        version));
+    }
+
+    private static Map<String, AttributeValue> toHistoryItem(String applicationId, HistoryEntry entry) {
+        Map<String, AttributeValue> item = new HashMap<>();
+        item.put(MainTable.PK, s(applicationKey(applicationId)));
+        // 日時を先に書くと、SK の順（文字列の順）が日時の順になる。同じ時刻の履歴は履歴IDで見分ける
+        item.put(MainTable.SK, s(HISTORY_PREFIX + AttributeValues.sortableTime(entry.at()) + "#" + entry.id()));
+        item.put("type", s("HISTORY"));
+        item.put("id", s(entry.id()));
+        item.put("at", s(entry.at().toString()));
+        item.put("actor", s(entry.actor()));
+        item.put("kind", s(entry.kind().code()));
+        item.put("from", s(entry.from()));
+        item.put("to", s(entry.to()));
+        putIfNotNull(item, "note", entry.note());
+        return item;
+    }
+
+    private static HistoryEntry fromHistoryItem(Map<String, AttributeValue> item) {
+        return new HistoryEntry(
+                getS(item, "id"),
+                Instant.parse(getS(item, "at")),
+                getS(item, "actor"),
+                HistoryEntry.Kind.fromCode(getS(item, "kind")),
+                getS(item, "from"),
+                getS(item, "to"),
+                getS(item, "note"));
     }
 
     private static AttributeValue toFlagValue(Flag flag) {
@@ -314,15 +467,5 @@ public class DynamoDbApplicationRepository implements ApplicationRepository {
 
     private static Map<String, AttributeValue> key(String pk) {
         return Map.of(MainTable.PK, s(pk), MainTable.SK, s(META));
-    }
-
-    /** トランザクションが「条件に合わない」ことで取りやめになったか。 */
-    private static boolean isConditionFailed(TransactionCanceledException e) {
-        for (CancellationReason reason : e.cancellationReasons()) {
-            if ("ConditionalCheckFailed".equals(reason.code())) {
-                return true;
-            }
-        }
-        return false;
     }
 }
