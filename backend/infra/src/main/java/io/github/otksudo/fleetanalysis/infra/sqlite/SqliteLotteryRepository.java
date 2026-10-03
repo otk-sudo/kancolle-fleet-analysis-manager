@@ -57,10 +57,13 @@ class SqliteLotteryRepository implements LotteryRepository {
                 .update();
     }
 
-    /** すべての抽選記録を新しい順に返す。実行日時が同じなら抽選IDの大きい順（いつも同じ順になるように） */
+    /**
+     * すべての抽選記録を新しい順に返す。実行日時が同じなら、あとから保存したものを先にする。
+     * rowid は、SQLite が行を足した順につける番号（公式: https://www.sqlite.org/lang_createtable.html#rowid ）
+     */
     @Override
     public List<LotteryRecord> findAll() {
-        return jdbc.sql("SELECT * FROM lotteries ORDER BY executed_at DESC, id DESC")
+        return jdbc.sql("SELECT * FROM lotteries ORDER BY executed_at DESC, rowid DESC")
                 .query((row, rowNumber) -> {
                     List<LotteryRecord.Entry> entries = new ArrayList<>();
                     for (Map<String, Object> entry : SqliteValues.jsonToList(row.getString("entries"))) {

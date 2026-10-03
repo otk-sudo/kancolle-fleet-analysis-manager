@@ -28,7 +28,7 @@ final class SqliteValues {
 
     /**
      * JSON の読み書きをする道具（Jackson）。
-     * USE_LONG_FOR_INTS: JSON の整数を Java の Long で読む（何もしないと Integer になり、保存前の値と型が変わるため）
+     * USE_LONG_FOR_INTS: JSON の整数は、大きさによらずいつも Java の Long で読む（Integer と Long が混ざらないように）
      */
     private static final JsonMapper JSON = JsonMapper.builder()
             .enable(DeserializationFeature.USE_LONG_FOR_INTS)

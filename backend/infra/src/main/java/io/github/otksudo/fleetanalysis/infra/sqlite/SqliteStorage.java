@@ -74,6 +74,7 @@ public final class SqliteStorage {
         SQLiteConfig config = new SQLiteConfig();
         config.setBusyTimeout(BUSY_TIMEOUT_MILLIS);
         config.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
+        // TODO(段階6): バックアップ（VACUUM INTO）を作るときに、WAL モード（書き込み中も読めて、保存が速くなる形）にするか決める
         SQLiteDataSource dataSource = new SQLiteDataSource(config);
         dataSource.setUrl("jdbc:sqlite:" + file.toAbsolutePath());
         return dataSource;
