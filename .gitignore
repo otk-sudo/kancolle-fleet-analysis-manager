@@ -15,9 +15,5 @@ build/
 !.env.example
 backend.log
 backend.exited
-# 手元で動かす DynamoDB Local のデータ（./gradlew :backend:infra:runDynamoDbLocal で作られる）
+# 手元で試すときの SQLite のデータ（./scripts/dev.sh db で作られる）
 .local/
-# テストで DynamoDB Local が作るファイル
-dynamodb-local-metadata.json
-dynamodb.log
-dynamodb.exited

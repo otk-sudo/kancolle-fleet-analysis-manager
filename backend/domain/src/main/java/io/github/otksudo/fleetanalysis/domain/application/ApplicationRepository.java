@@ -7,8 +7,8 @@ import java.util.Optional;
 /**
  * 応募の保存先の「約束」（インターフェース）。
  *
- * <p>domain は「保存できること」だけを決め、実際にどこへ保存するか（メモリ、DynamoDB）は infra が決める。
- * こうしておくと、試作ではメモリ、本番では DynamoDB、と差し替えても業務ロジックは変えずに済む。
+ * <p>domain は「保存できること」だけを決め、実際にどこへ保存するか（メモリ、SQLite）は infra が決める。
+ * こうしておくと、テストではメモリ、配信者さんのPCでは SQLite、と差し替えても業務ロジックは変えずに済む。
  */
 public interface ApplicationRepository {
 

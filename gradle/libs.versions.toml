@@ -7,9 +7,6 @@ spring-boot = "4.1.1"         # Javaでアプリを作るためのフレーム�
 openapi-generator = "7.25.0"  # OpenAPI定義からJavaのコードを自動生成するツール
 junit = "5.13.4"              # Javaのテストフレームワーク
 assertj = "3.27.6"            # テストの「期待値の確認」を読みやすく書くためのライブラリ
-aws-sdk = "2.55.11"           # AWS SDK for Java 2.x（JavaからDynamoDBなどのAWSサービスを使うためのライブラリ）
-dynamodb-local = "3.3.1"      # DynamoDB Local（自分のPCで動くDynamoDBの代わり。テストと手元の動作確認に使う）
-sqlite4java = "1.0.392"       # DynamoDB Local が中で使うデータベース（SQLite）をJavaから使う部品
 
 [libraries]
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit" }
@@ -17,9 +14,6 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-jupiter-params = { module = "org.junit.jupiter:junit-jupiter-params" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
-aws-sdk-bom = { module = "software.amazon.awssdk:bom", version.ref = "aws-sdk" }
-aws-sdk-dynamodb = { module = "software.amazon.awssdk:dynamodb" }
-dynamodb-local = { module = "software.amazon.dynamodb:DynamoDBLocal", version.ref = "dynamodb-local" }
 
 [plugins]
 spring-boot = { id = "org.springframework.boot", version.ref = "spring-boot" }

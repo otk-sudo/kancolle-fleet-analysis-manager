@@ -67,7 +67,7 @@ public class ApplicationService {
         }
 
         Map<String, Object> answers = command.answers();
-        // 項目コードが空の回答は保存できない（DynamoDB は空の名前を受け付けない）ので、入力の誤りとして断る
+        // 項目コードが空の回答は、画面でどの項目かわからなくなるので、入力の誤りとして断る
         for (String key : answers.keySet()) {
             if (key == null || key.isBlank()) {
                 throw new InvalidValueException("回答の項目コードが空です");
@@ -272,9 +272,9 @@ public class ApplicationService {
     }
 
     /**
-     * 1回のまとめてのステータス変更で変えられる最大の件数（DynamoDB のトランザクションの最大100件に収まるように）。
-     * 1件につき応募と履歴の2件を書き、さらに印が変わった同じ人の応募も一緒に書くので、余裕をもって25件にしている。
-     * それでも超えたときは、保存先が「件数を減らしてやり直して」と断る（何も保存しない）。
+     * 1回のまとめてのステータス変更で変えられる最大の件数。
+     * 以前の保存先（DynamoDB）の「1回のトランザクションは100件まで」に収まるように決めた数。
+     * SQLite にはこの制限がないが、API の約束（api/openapi.yaml の maxItems）と画面を変えないよう、今は25件のままにしている。
      */
     public static final int BULK_LIMIT = 25;
 

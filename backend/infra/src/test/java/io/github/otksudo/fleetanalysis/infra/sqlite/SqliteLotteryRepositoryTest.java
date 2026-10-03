@@ -1,4 +1,4 @@
-package io.github.otksudo.fleetanalysis.infra.dynamodb;
+package io.github.otksudo.fleetanalysis.infra.sqlite;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -7,14 +7,25 @@ import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRecord;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRepository;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotteryRepository.VersionedSettings;
 import io.github.otksudo.fleetanalysis.domain.lottery.LotterySettings;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-/** {@link DynamoDbLotteryRepository} のテスト。DynamoDB Local を使う。 */
-class DynamoDbLotteryRepositoryTest {
+/** {@link SqliteLotteryRepository} のテスト。テストごとに、一時フォルダに新しいデータベースのファイルを作って使う。 */
+class SqliteLotteryRepositoryTest {
 
-    private final LotteryRepository repository = LocalDynamoDb.newStorage().lotteries();
+    @TempDir
+    Path dataDir;
+
+    private LotteryRepository repository;
+
+    @BeforeEach
+    void openStorage() {
+        repository = SqliteStorage.open(dataDir.resolve("test.db")).lotteries();
+    }
 
     @Test
     void 抽選記録を新しい順に読み戻せる() {
@@ -43,5 +54,14 @@ class DynamoDbLotteryRepositoryTest {
         // 古い版（1）のまま保存しようとすると断られ、設定は変わらない
         assertThat(repository.saveSettings(LotterySettings.DEFAULT, 1)).isNull();
         assertThat(repository.loadSettings().settings()).isEqualTo(changed);
+    }
+
+    @Test
+    void 保存した設定は開き直しても残る() {
+        LotterySettings changed = new LotterySettings(true, false, 0.0);
+        repository.saveSettings(changed, 1);
+
+        LotteryRepository reopened = SqliteStorage.open(dataDir.resolve("test.db")).lotteries();
+        assertThat(reopened.loadSettings()).isEqualTo(new VersionedSettings(changed, 2));
     }
 }

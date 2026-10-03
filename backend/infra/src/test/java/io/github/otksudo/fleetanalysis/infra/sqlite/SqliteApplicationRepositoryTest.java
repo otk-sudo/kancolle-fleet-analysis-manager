@@ -1,4 +1,4 @@
-package io.github.otksudo.fleetanalysis.infra.dynamodb;
+package io.github.otksudo.fleetanalysis.infra.sqlite;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -20,18 +20,29 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.nio.file.Path;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
- * {@link DynamoDbApplicationRepository} のテスト。DynamoDB Local（テスト用に同じプログラムの中で動く）を使う。
+ * {@link SqliteApplicationRepository} のテスト。テストごとに、一時フォルダに新しいデータベースのファイルを作って使う。
  *
- * <p>保存した値がすべて同じ形で読み戻せるか、と、二重登録を防げるかを確かめる。
+ * <p>保存した値がすべて同じ形で読み戻せるか、と、二重登録や同時変更を防げるかを確かめる。
  */
-class DynamoDbApplicationRepositoryTest {
+class SqliteApplicationRepositoryTest {
 
-    private final ApplicationRepository repository = LocalDynamoDb.newStorage().applications();
+    /** JUnit がテストごとに作り、終わったら消してくれる一時フォルダ */
+    @TempDir
+    Path dataDir;
+
+    private ApplicationRepository repository;
+
+    @BeforeEach
+    void openStorage() {
+        repository = SqliteStorage.open(dataDir.resolve("test.db")).applications();
+    }
 
     private static Application newApplication(String id, String submissionId, String xId, String receivedAt) {
         Map<String, Object> answers = new LinkedHashMap<>();
@@ -118,7 +129,7 @@ class DynamoDbApplicationRepositoryTest {
 
     @Test
     void 受付日時の秒の端数があってもなくても受付順に並ぶ() {
-        // "10:00:00Z" と "10:00:00.5Z" は、そのまま文字列で並べると順番が逆になる（AttributeValues.sortableTime）
+        // "10:00:00Z" と "10:00:00.5Z" は、そのまま文字列で並べると順番が逆になる（SqliteValues.TIME を参照）
         repository.save(newApplication("late", "s1", "@a", "2026-10-01T10:00:00.5Z"));
         repository.save(newApplication("early", "s2", "@b", "2026-10-01T10:00:00Z"));
         assertThat(repository.findAll()).extracting(Application::id).containsExactly("early", "late");
@@ -143,7 +154,7 @@ class DynamoDbApplicationRepositoryTest {
     }
 
     @Test
-    void XのIDで消すと回答IDの控えも消える() {
+    void XのIDで消すと履歴も消え_同じ回答IDで登録し直せる() {
         repository.save(newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z"));
         repository.save(newApplication("a2", "s2", "@Bravo", "2026-10-01T11:00:00Z"));
 
@@ -156,7 +167,7 @@ class DynamoDbApplicationRepositoryTest {
         assertThat(repository.findAll()).extracting(Application::id).containsExactly("a2");
         assertThat(repository.findHistory("a1")).isEmpty();
         assertThat(repository.findBySubmissionId("s1")).isEmpty();
-        // 控えが消えているので、同じ回答IDで新しく登録できる
+        // 消した応募の回答IDは、新しく登録し直せる
         repository.save(newApplication("a3", "s1", "@Alpha", "2026-10-03T10:00:00Z"));
     }
 
@@ -228,26 +239,43 @@ class DynamoDbApplicationRepositoryTest {
             assertThat(entry.note()).isEqualTo("次の人へ");
             assertThat(entry.at()).isEqualTo(Instant.parse("2026-10-02T11:00:00Z"));
         });
-        // XのIDを直すと、索引（GSI3）も新しいIDで探せるようになる
+        // XのIDを直すと、新しいIDで探せるようになる
         assertThat(repository.findByXId(XId.parse("@alpha2"))).extracting(Application::id).containsExactly("a1");
         assertThat(repository.findByXId(XId.parse("@alpha"))).isEmpty();
     }
 
     @Test
-    void 版のない段階1の応募も読み込んで保存し直せる() {
-        String table = LocalDynamoDb.newTable();
-        ApplicationRepository repository = new DynamoDbApplicationRepository(LocalDynamoDb.client(), table);
-        repository.save(newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z"));
-        // 段階1の保存の形（version の項目がない）にする
-        LocalDynamoDb.client().updateItem(u -> u.tableName(table)
-                .key(Map.of("PK", AttributeValue.fromS("APP#a1"), "SK", AttributeValue.fromS("META")))
-                .updateExpression("REMOVE version"));
+    void 止めて開き直してもデータが残る() {
+        Application application = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
+        repository.save(application);
+        application.changeStatus(ApplicationStatus.SCHEDULED, null, Instant.parse("2026-10-02T00:00:00Z"));
+        repository.save(application);
 
-        Application legacy = repository.findById("a1").orElseThrow();
-        assertThat(legacy.version()).isEqualTo(1);
-        legacy.changeMemo("段階2で保存", Instant.parse("2026-10-02T00:00:00Z"));
-        repository.save(legacy);
-        assertThat(repository.findById("a1").orElseThrow().version()).isEqualTo(2);
+        // 同じファイルを開き直す（ツールを起動し直したときと同じ）。表はもうあるので、Flyway は何もしない
+        ApplicationRepository reopened = SqliteStorage.open(dataDir.resolve("test.db")).applications();
+        assertThat(reopened.findById("a1").orElseThrow().status()).isEqualTo(ApplicationStatus.SCHEDULED);
+        assertThat(reopened.findHistory("a1")).hasSize(1);
+    }
+
+    @Test
+    void 同じ回答IDの応募を1回のまとめての保存に2件入れると断る() {
+        Application first = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
+        Application second = newApplication("a2", "s1", "@Alpha", "2026-10-01T10:00:00Z");
+        assertThatThrownBy(() -> repository.saveAll(List.of(first, second))).isInstanceOf(ConflictException.class);
+        assertThat(repository.findAll()).isEmpty();
+        // 断られたときは版を進めない（もう一度保存し直せるように）
+        assertThat(first.version()).isZero();
+    }
+
+    @Test
+    void 消えた応募を古い版のまま保存しようとすると断る() {
+        repository.save(newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z"));
+        Application loaded = repository.findById("a1").orElseThrow();
+        repository.deleteByXId(XId.parse("@alpha"));
+
+        loaded.changeMemo("メモ", Instant.parse("2026-10-02T00:00:00Z"));
+        assertThatThrownBy(() -> repository.save(loaded)).isInstanceOf(ConflictException.class);
+        assertThat(repository.findAll()).isEmpty();
     }
 
     private static IntakeCommand intake(String submissionId, String xId, String receivedAt) {

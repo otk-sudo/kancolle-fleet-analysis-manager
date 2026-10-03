@@ -35,8 +35,6 @@ function Layout() {
             <a className="button" href="/stream" target="_blank" rel="noreferrer">
               配信用画面を開く
             </a>
-            {/* TODO(段階4): 次のPRで SQLite に保存するようになったら、この表示を消す */}
-            <span className="site-user">試作版（データは再起動で元に戻ります）</span>
           </div>
         </div>
       </header>
