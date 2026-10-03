@@ -49,7 +49,7 @@ class DynamoDbApplicationRepositoryTest {
     void 保存した応募を全項目そのまま読み戻せる() {
         Application application = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
         Instant now = Instant.parse("2026-10-02T09:30:00.5Z");
-        application.changeStatus(ApplicationStatus.SCHEDULED, null, now, "テスト");
+        application.changeStatus(ApplicationStatus.SCHEDULED, null, now);
         application.changeStreamDate(LocalDate.parse("2026-10-10"), now);
         application.changeMemo("先に装備を確認", now);
         application.changeAnalysisMemo("制空値が足りない", now);
@@ -96,7 +96,7 @@ class DynamoDbApplicationRepositoryTest {
     void 一覧は保存した最新の内容を返す() {
         Application application = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
         repository.save(application);
-        application.changeStatus(ApplicationStatus.SKIPPED, SkipReason.WITHDRAWN, Instant.parse("2026-10-02T00:00:00Z"), "テスト");
+        application.changeStatus(ApplicationStatus.SKIPPED, SkipReason.WITHDRAWN, Instant.parse("2026-10-02T00:00:00Z"));
         repository.save(application);
         assertThat(repository.findAll()).extracting(Application::status).containsExactly(ApplicationStatus.SKIPPED);
         assertThat(repository.findAll()).extracting(Application::skipReason).containsExactly(SkipReason.WITHDRAWN);
@@ -148,7 +148,7 @@ class DynamoDbApplicationRepositoryTest {
         repository.save(newApplication("a2", "s2", "@Bravo", "2026-10-01T11:00:00Z"));
 
         Application withHistory = repository.findById("a1").orElseThrow();
-        withHistory.changeStatus(ApplicationStatus.SKIPPED, SkipReason.WITHDRAWN, Instant.parse("2026-10-02T00:00:00Z"), "運営");
+        withHistory.changeStatus(ApplicationStatus.SKIPPED, SkipReason.WITHDRAWN, Instant.parse("2026-10-02T00:00:00Z"));
         repository.save(withHistory);
 
         repository.deleteByXId(XId.parse("@alpha"));
@@ -212,10 +212,10 @@ class DynamoDbApplicationRepositoryTest {
     void 変更履歴を応募と一緒に保存し古い順に読み戻せる() {
         Application application = newApplication("a1", "s1", "@Alpha", "2026-10-01T10:00:00Z");
         repository.save(application);
-        application.changeStatus(ApplicationStatus.ANALYZING, null, Instant.parse("2026-10-02T10:00:00Z"), "配信者");
-        application.changeXId(XId.parse("@alpha2"), Instant.parse("2026-10-02T10:00:00Z"), "運営");
+        application.changeStatus(ApplicationStatus.ANALYZING, null, Instant.parse("2026-10-02T10:00:00Z"));
+        application.changeXId(XId.parse("@alpha2"), Instant.parse("2026-10-02T10:00:00Z"));
         repository.save(application);
-        application.changeStatusBySystem(ApplicationStatus.DONE, null, Instant.parse("2026-10-02T11:00:00Z"), "配信者", "次の人へ");
+        application.changeStatusBySystem(ApplicationStatus.DONE, null, Instant.parse("2026-10-02T11:00:00Z"), "次の人へ");
         repository.save(application);
 
         List<HistoryEntry> history = repository.findHistory("a1");

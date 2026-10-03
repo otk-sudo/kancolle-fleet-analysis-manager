@@ -1,11 +1,9 @@
 # 「local」プロファイルの設定。手元の DynamoDB Local（./gradlew :backend:infra:runDynamoDbLocal で起動）に保存する。
 # --spring.profiles.active=local で起動すると、application.yml の上にこの内容が重ねて読み込まれる。
 # データは止めても残る（リポジトリの一番上の .local/dynamodb に保存される）。
+# TODO(段階4): 次のPRで SQLite に変えたら、このファイルはなくす
 
 app:
-  # 手元なので、仮ログイン（役割を選ぶだけ）を使う
-  auth:
-    mode: dev
   storage: dynamodb
   dynamodb:
     table-name: Main

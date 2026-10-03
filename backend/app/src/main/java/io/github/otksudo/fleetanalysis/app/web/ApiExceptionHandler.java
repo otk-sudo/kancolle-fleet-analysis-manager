@@ -2,7 +2,6 @@ package io.github.otksudo.fleetanalysis.app.web;
 
 import io.github.otksudo.fleetanalysis.app.api.model.ApiError;
 import io.github.otksudo.fleetanalysis.domain.ConflictException;
-import io.github.otksudo.fleetanalysis.domain.ForbiddenException;
 import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.NotFoundException;
 import org.springframework.http.HttpStatus;
@@ -34,12 +33,6 @@ public class ApiExceptionHandler {
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentNotValidException.class})
     public ResponseEntity<ApiError> handleUnreadable(Exception e) {
         return error(HttpStatus.BAD_REQUEST, "invalid_value", "送られてきた内容が正しくありません（必須の項目がない、値の形が違う、など）");
-    }
-
-    /** ログインしている人に、その操作をする権限がないとき */
-    @ExceptionHandler(ForbiddenException.class)
-    public ResponseEntity<ApiError> handleForbidden(ForbiddenException e) {
-        return error(HttpStatus.FORBIDDEN, "forbidden", e.getMessage());
     }
 
     @ExceptionHandler(NotFoundException.class)

@@ -9,17 +9,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
-import io.github.otksudo.fleetanalysis.app.security.DevLogin;
-import io.github.otksudo.fleetanalysis.app.security.DevUsers;
-import java.net.URI;
+import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
+import io.github.otksudo.fleetanalysis.domain.application.IntakeCommand;
+import java.time.Instant;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.MockMvcBuilderCustomizer;
-import org.springframework.context.annotation.Bean;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
@@ -29,90 +25,40 @@ import org.springframework.test.web.servlet.MockMvc;
  * APIを外から呼んだときの動きを確かめるテスト。
  *
  * <p>{@code MockMvc} は、実際にWebサーバーを立てずに「HTTPリクエストを送ったつもり」でコントローラーを呼べる道具。
- * フィルター（秘密キーの確認）や例外の変換も、本物と同じ順番で通る。
+ * フィルター（Host・Origin の確認）や例外の変換も、本物と同じ順番で通る。
+ * MockMvc の要求の Host は、何も指定しないと localhost になるので、Host の確認を通る。
  *
  * <p>{@code @DirtiesContext} は「テストごとにアプリを作り直す」指定。保存先がメモリなので、
  * 前のテストで登録した応募が次のテストに残らないようにしている。
- *
- * <p>このテストでは、すべてのリクエストに「配信者の試しユーザー」のトークンを付けて送る（{@link AsStreamer}）。
- * ログインや権限そのものの確認は {@code AuthApiTest} で行う。
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class ApiTest {
 
-    /**
-     * テストのときだけ足す部品。MockMvc で送るすべてのリクエストに、配信者のトークンを付ける。
-     * {@code defaultRequest} に書いたヘッダーは、各テストのリクエストに自動で足される。
-     */
-    @TestConfiguration
-    static class AsStreamer {
-
-        @Bean
-        MockMvcBuilderCustomizer streamerToken(DevLogin devLogin, DevUsers devUsers) {
-            String token = devLogin.issue(devUsers.user("dev-streamer").orElseThrow());
-            return builder -> builder.defaultRequest(get("/").header("Authorization", "Bearer " + token));
-        }
-    }
-
     @Autowired
     private MockMvc mockMvc;
 
+    @Autowired
+    private ApplicationService applicationService;
+
     /**
-     * 応募受付のJSON。受付日時は回答IDの番号の秒にする（例: s2 → 12:00:02）。
+     * 応募を1件入れて、応募IDを返す。受付日時は回答IDの番号の秒にする（例: s2 → 12:00:02）。
      * 同じ人の応募の「どちらが先か」で印が決まるので、受付順がはっきりするようにしている。
+     *
+     * <p>フォームの回答を取り込むAPIは段階5で作るので、今はサーバーの中の受付処理を直接呼ぶ。
      */
-    private static String intakeJson(String submissionId, String xId) {
-        return """
-                {
-                  "submissionId": "%s",
-                  "submittedAt": "2026-10-01T12:00:%02d+09:00",
-                  "formVersion": "v1",
-                  "answers": {
-                    "xId": "%s",
-                    "admiralName": "テスト提督",
-                    "nameDisplay": "匿名希望",
-                    "simulatorUrl": "https://example.com/fleet",
-                    "monthlySpending": "0円",
-                    "purpose": "イベント"
-                  }
-                }
-                """.formatted(submissionId, Integer.parseInt(submissionId.replaceAll("\\D", "")), xId);
-    }
-
-    private String submit(String submissionId, String xId) throws Exception {
-        String body = mockMvc.perform(post("/intake/applications")
-                        .header("X-Form-Key", "dev-form-key")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(intakeJson(submissionId, xId)))
-                .andExpect(status().isCreated())
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        return JsonPath.read(body, "$.applicationId");
-    }
-
-    @Test
-    void 秘密キーがないと受付できない() throws Exception {
-        mockMvc.perform(post("/intake/applications")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(intakeJson("s1", "@test_user")))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("unauthorized"));
-    }
-
-    @ParameterizedTest
-    // URLの書き方を変えても秘密キーの確認をすり抜けられないこと（%69 は i を別の書き方にしたもの、;a=b は付け足し）。
-    // ;a=b を含むURLは、秘密キーの確認より前に Spring Security が「怪しいURL」として400で断る。
-    // どちらで断られても受付されなければよいので、「400番台（送った側の誤り）」であることと、応募が増えていないことを確かめる
-    @ValueSource(strings = {"/%69ntake/applications", "/intake;a=b/applications", "/intake/applications;a=b"})
-    void URLの書き方を変えても秘密キーの確認はすり抜けられない(String path) throws Exception {
-        mockMvc.perform(post(URI.create(path))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(intakeJson("s1", "@test_user")))
-                .andExpect(status().is4xxClientError());
-        mockMvc.perform(get("/applications")).andExpect(jsonPath("$.items", hasSize(0)));
+    private String submit(String submissionId, String xId) {
+        int second = Integer.parseInt(submissionId.replaceAll("\\D", ""));
+        Map<String, Object> answers = Map.of(
+                "xId", xId,
+                "admiralName", "テスト提督",
+                "nameDisplay", "匿名希望",
+                "simulatorUrl", "https://example.com/fleet",
+                "monthlySpending", "0円",
+                "purpose", "イベント");
+        return applicationService.submit(new IntakeCommand(
+                submissionId, Instant.parse("2026-10-01T03:00:%02dZ".formatted(second)), "v1", answers)).id();
     }
 
     @Test
@@ -133,11 +79,9 @@ class ApiTest {
     @Test
     void 同じXのIDの2件目には重複の印がつく() throws Exception {
         submit("s1", "@test_user");
-        mockMvc.perform(post("/intake/applications")
-                        .header("X-Form-Key", "dev-form-key")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(intakeJson("s2", "@test_user")))
-                .andExpect(status().isCreated())
+        String second = submit("s2", "@test_user");
+        mockMvc.perform(get("/applications/" + second))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.flags[0].type").value("duplicate"));
     }
 

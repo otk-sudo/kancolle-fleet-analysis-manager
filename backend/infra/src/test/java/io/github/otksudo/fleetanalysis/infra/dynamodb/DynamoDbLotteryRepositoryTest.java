@@ -18,9 +18,9 @@ class DynamoDbLotteryRepositoryTest {
 
     @Test
     void 抽選記録を新しい順に読み戻せる() {
-        LotteryRecord older = new LotteryRecord("l1", LotteryMode.BULK, Instant.parse("2026-10-01T10:00:00Z"), "配信者",
+        LotteryRecord older = new LotteryRecord("l1", LotteryMode.BULK, Instant.parse("2026-10-01T10:00:00Z"),
                 42L, List.of(new LotteryRecord.Entry("a1", 1.0, true), new LotteryRecord.Entry("a2", 2.5, false)));
-        LotteryRecord newer = new LotteryRecord("l2", LotteryMode.LIVE, Instant.parse("2026-10-02T10:00:00Z"), "運営",
+        LotteryRecord newer = new LotteryRecord("l2", LotteryMode.LIVE, Instant.parse("2026-10-02T10:00:00Z"),
                 -7L, List.of(new LotteryRecord.Entry("a3", 1.0, true)));
         repository.save(older);
         repository.save(newer);
