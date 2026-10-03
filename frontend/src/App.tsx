@@ -3,6 +3,7 @@ import Layout from './components/Layout'
 import ApplicationDetailPage from './pages/ApplicationDetailPage'
 import ApplicationListPage from './pages/ApplicationListPage'
 import LotteryPage from './pages/LotteryPage'
+import SettingsPage from './pages/SettingsPage'
 import StreamPage from './pages/StreamPage'
 
 /**
@@ -20,6 +21,7 @@ function App() {
           <Route path="/" element={<ApplicationListPage />} />
           <Route path="/applications/:applicationId" element={<ApplicationDetailPage />} />
           <Route path="/lottery" element={<LotteryPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
         {/* 配信用画面: 配信に映すので、メニューのない画面にする */}
         <Route path="/stream" element={<StreamPage />} />

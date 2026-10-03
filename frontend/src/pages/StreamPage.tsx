@@ -108,17 +108,17 @@ function StreamPage() {
             {withTitle(current.displayName)}
           </h1>
           <AnswerTable answers={current.answers} previous={current.previous} hidden={['simulatorUrl']} />
-          {current.previous && <p className="stream-note">黄色の行は前回の応募から変わった項目です</p>}
+          {current.previous && <p className="stream-note">金の点の項目は前回分析した応募から変わった項目です</p>}
         </>
       )}
       {error && <p className="error">{error}</p>}
       {/* 配信者さんが操作するボタン。配信ソフトで映す範囲から外せるよう、画面の下に置いている */}
       <div className="stream-controls">
-        <button type="button" className="primary" onClick={() => void advance()} disabled={drawing || busy}>
+        <button type="button" className="button primary" onClick={() => void advance()} disabled={drawing || busy}>
           次の人へ
         </button>
         {lotteryEnabled && (
-          <button type="button" onClick={() => void drawLive()} disabled={drawing}>
+          <button type="button" className="button" onClick={() => void drawLive()} disabled={drawing}>
             配信中の抽選（1人）
           </button>
         )}

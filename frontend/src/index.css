@@ -1,300 +1,963 @@
-/* 画面全体の見た目。色は変数（--名前）にまとめ、ダークモードでは変数の値だけを入れ替える */
+/*
+ * 画面全体の見た目。
+ * デザインの決まり（色・文字・動き）とその理由は、docs/ui/design-plan.md と docs/ui/handoff.md にある。
+ *
+ * 色はここの「デザイントークン」（--color-◯◯ という名前の変数）にまとめ、画面ごとに色コードを直接書かない。
+ * 色を変えたくなったら、ここの1か所を変えれば全画面に反映される。
+ * 画面は明るい1つのテーマだけにする（暗い画面用の色は作らない。2026-10-03 決定）。
+ */
 :root {
-  font-family: system-ui, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
-  --fg: #1f2328;
-  --muted: #59636e;
-  --bg: #ffffff;
-  --surface: #f6f8fa;
-  --border: #d1d9e0;
-  --accent: #0969da;
-  --changed: #fff8c5;
-  --error: #cf222e;
-  --ok: #1a7f37;
-  color: var(--fg);
-  background: var(--bg);
-}
+  --color-ground: #faf7f0; /* 地（紙の色） */
+  --color-ground-deep: #f3efe4; /* 地より少し濃い色（グループの見出し、前回の振り返り） */
+  --color-surface: #ffffff; /* カード */
+  --color-navy: #14264a; /* 主な文字・強調 */
+  --color-navy-hover: #0a1630;
+  --color-navy-soft: #eceff5; /* 今いるメニューの背景 */
+  --color-gold: #c9a24b; /* 区切りの線と「前回から変わった」の点だけ */
+  --color-gold-text: #8a6a1e; /* 「前回から変わった」の文字 */
+  --color-text: #1c2330;
+  --color-text-sub: #4a5262; /* 補足の文字 */
+  --color-text-label: #3d4656; /* 入力欄の名前 */
+  --color-border: #dce1ea; /* カードの枠 */
+  --color-border-input: #b9c0cc; /* 入力欄の枠 */
+  --color-row-line: #e6e9ee; /* 表の行の区切り */
+  --color-row-hover: #f6f2e8;
+  --color-row-selected: #f7f1df;
+  --color-warn: #a1251b; /* 重複・条件外・取り消し */
+  --color-info: #1f4e9a; /* 再応募 */
+  --color-info-soft: #e6edf8;
+  --color-on-dark: #ffffff; /* 濃い地（紺・赤茶）の上の文字 */
+  --color-on-dark-line: #8fa3c4; /* 紺地の上の枠線（「選ぶのをやめる」） */
+  --color-backdrop: rgba(20, 38, 74, 0.35); /* ダイアログの後ろを暗くする色（紺を透かしたもの） */
+  --color-shadow: rgba(20, 38, 74, 0.25); /* ダイアログの影 */
+  --radius-card: 10px;
+  --radius-control: 8px;
+  /* 押せるものの高さ。指でもマウスでも押しやすいよう44px以上にする（handoff.md の8） */
+  --control-height: 44px;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --fg: #e6edf3;
-    --muted: #9198a1;
-    --bg: #0d1117;
-    --surface: #151b23;
-    --border: #3d444d;
-    --accent: #4493f8;
-    --changed: #3b2e00;
-    --error: #f85149;
-    --ok: #3fb950;
-  }
+  /* 書体は2つだけ。見出しは しっぽり明朝 B1、本文は BIZ UDPゴシック（index.html で Google Fonts から読み込む） */
+  --font-heading: 'Shippori Mincho B1', serif;
+  --font-body: 'BIZ UDPGothic', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-text);
+  background: var(--color-ground);
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--color-ground);
 }
 
 a {
-  color: var(--accent);
+  color: var(--color-navy);
+}
+a:hover {
+  color: var(--color-navy-hover);
 }
 
-.app {
-  max-width: 1120px;
+/* 見た目には出さず、画面読み上げソフトにだけ読ませる文字（チェックボックスの列の名前など） */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ───────── 共通の枠（ヘッダー） ───────── */
+
+/* ヘッダーの下に金の線を1本引く（金は線にだけ使う） */
+.site-header {
+  background: var(--color-surface);
+  border-bottom: 2px solid var(--color-gold);
+}
+.site-header-inner {
+  max-width: 1360px;
   margin: 0 auto;
-  padding: 16px;
-}
-
-/* 上のメニュー */
-.header {
+  padding: 0 24px;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px 32px;
+  min-height: 64px;
 }
-.header .title {
-  font-weight: bold;
+.site-title {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 19px;
+  color: var(--color-navy);
 }
-.header nav {
-  display: flex;
-  gap: 12px;
-}
-.header nav a {
-  text-decoration: none;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.header nav a.active {
-  background: var(--surface);
-  font-weight: bold;
-}
-.prototype-note {
-  margin-left: auto;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-h1 small {
-  font-size: 0.6em;
-  color: var(--muted);
-}
-
-/* 絞り込み・入力欄 */
-.filters,
-.form {
+.site-nav {
   display: flex;
   flex-wrap: wrap;
+  gap: 4px;
+  flex: 1 1 auto;
+}
+.site-nav a {
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-label);
+  text-decoration: none;
+}
+/* NavLink は今いるページのリンクに active クラスを付ける */
+.site-nav a.active {
+  background: var(--color-navy-soft);
+  color: var(--color-navy);
+  font-weight: 700;
+}
+.site-header-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
-  align-items: flex-end;
-  margin-bottom: 16px;
 }
-.form {
-  flex-direction: column;
-  align-items: stretch;
-  max-width: 420px;
+.site-user {
+  font-size: 13px;
+  color: var(--color-text-sub);
 }
-label {
+
+/* ───────── ページの中身 ───────── */
+
+.page {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 20px;
+}
+/* 画面名。見出しの書体は画面名と提督名だけに使う */
+.page-title {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--color-navy);
+}
+/* 説明文。1行が長くなりすぎないよう幅の上限を付ける（全角40字くらい） */
+.page-lead {
+  margin: 6px 0 0;
+  max-width: 40em;
+  color: var(--color-text-sub);
   font-size: 14px;
 }
-label.inline {
-  flex-direction: row;
-  align-items: center;
+
+/* 左に主な内容、右に操作を置く2列。画面が狭いと自動で1列になる（flex-wrap） */
+.two-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
 }
-select,
-input,
-textarea,
-button {
-  font: inherit;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--fg);
+.two-columns > .main-column {
+  flex: 999 1 640px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
-button {
-  cursor: pointer;
-  background: var(--surface);
-}
-button.primary {
-  background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.two-columns > .side-column {
+  flex: 1 1 340px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-/* 表 */
-table {
-  border-collapse: collapse;
-  width: 100%;
+/* カード（白い四角の囲み） */
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-th,
-td {
-  text-align: left;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
+.card.compact {
+  padding: 20px;
 }
-table.list thead th,
-table.answers thead th {
-  background: var(--surface);
+/* 「前回の分析の振り返り」のように、管理画面だけの補足を置く少し濃い地のカード */
+.card.tinted {
+  background: var(--color-ground-deep);
+  border-color: transparent;
+  gap: 8px;
+}
+/* 確認が必要なこと（重複の解消など）を知らせるカード */
+.card.warn {
+  border-color: var(--color-warn);
+}
+.card-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-navy);
+}
+.card-note {
+  margin: 0;
   font-size: 13px;
+  color: var(--color-text-sub);
 }
-table.answers tbody th {
-  width: 11em;
-  font-weight: normal;
-  color: var(--muted);
+
+.sub {
+  color: var(--color-text-sub);
 }
-tr.changed td,
-tr.changed th {
-  background: var(--changed);
+.small {
+  font-size: 13px;
 }
 .nowrap {
   white-space: nowrap;
 }
-
-/* ステータスや印の小さなラベル */
-.badge {
-  display: inline-block;
-  margin-right: 4px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  white-space: nowrap;
+/* 数字の幅をそろえる（日時や件数が縦に並んだときにずれない） */
+.num {
+  font-variant-numeric: tabular-nums;
 }
-.status-analyzing {
-  background: #ddf4ff;
-  color: #0550ae;
-  border-color: #54aeff;
-}
-.status-scheduled {
-  background: #fff8c5;
-  color: #7d4e00;
-  border-color: #d4a72c;
-}
-.status-done {
-  background: #dafbe1;
-  color: #116329;
-  border-color: #4ac26b;
-}
-.status-lost,
-.status-skipped {
-  color: var(--muted);
-}
-.flag-duplicate {
-  background: #ffebe9;
-  color: #a40e26;
-  border-color: #ff8182;
-}
-.flag-reapply {
-  background: #fbefff;
-  color: #6e40c9;
-  border-color: #c297ff;
-}
-.flag-ineligible {
-  background: #fff1e5;
-  color: #953800;
-  border-color: #fb8f44;
-}
-.anonymous {
-  color: var(--muted);
-  margin-left: 6px;
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-.flag-reason {
-  margin: 4px 0;
-  font-size: 14px;
-  color: var(--muted);
-}
-.error {
-  color: var(--error);
-}
-.ok {
-  color: var(--ok);
-}
-
-/* 入力欄とボタンを横に並べる（配信日の「消す」など） */
-span.inline {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.muted {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* 一覧で選んだ応募をまとめて変える帯 */
-.bulk-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-end;
-  padding: 8px 12px;
-  margin-bottom: 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-/* 前回の分析（詳細画面） */
-dl.previous {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  gap: 4px 12px;
-}
-dl.previous dt {
-  color: var(--muted);
-}
-dl.previous dd {
-  margin: 0;
-}
-/* 改行をそのまま見せる（分析メモ） */
+/* 改行をそのまま見せる（分析メモ・相談内容） */
 .pre {
   white-space: pre-wrap;
 }
-ul.history {
-  padding-left: 20px;
+.readable {
+  max-width: 40em;
+}
+
+/* ───────── 入力欄とボタン ───────── */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field > label,
+.field-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-label);
+}
+.field-help {
+  font-size: 12px;
+  color: var(--color-text-sub);
+}
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+input:not([type='checkbox']),
+select {
+  height: var(--control-height);
+  padding: 0 10px;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-sizing: border-box;
+}
+textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-control);
+  resize: vertical;
+  color: var(--color-text);
+}
+input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-navy);
+}
+/* キーボードで操作している人に、いまどこにいるかがはっきりわかるようにする */
+:focus-visible {
+  outline: 3px solid var(--color-info);
+  outline-offset: 2px;
+}
+
+/* ボタンは3種類: 主な操作（紺地）、ほかの操作（紺の枠）、取り消しなど注意の操作（赤茶の枠） */
+.button {
+  min-height: var(--control-height);
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--color-navy);
+  background: var(--color-surface);
+  color: var(--color-navy);
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+.button.primary {
+  background: var(--color-navy);
+  color: var(--color-on-dark);
+}
+.button.primary:hover {
+  background: var(--color-navy-hover);
+  color: var(--color-on-dark);
+}
+.button.danger {
+  border-color: var(--color-warn);
+  color: var(--color-warn);
+  font-weight: 400;
+}
+.button.danger.filled {
+  background: var(--color-warn);
+  color: var(--color-on-dark);
+  font-weight: 700;
+}
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* 文字だけのボタン（「消す」など、目立たせなくてよい操作） */
+.link-button {
+  min-height: var(--control-height);
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--color-navy);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+/* ───────── お知らせ ───────── */
+
+.notice {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+.notice-body {
+  flex: 1 1 420px;
+  max-width: 46em;
+}
+.notice-title {
+  font-weight: 700;
+}
+.notice-text {
+  color: var(--color-text-label);
   font-size: 14px;
 }
-
-/* 2列のレイアウト（狭い画面では1列） */
-.columns {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 24px;
+.notice.notice-error {
+  border-color: var(--color-warn);
 }
-@media (max-width: 800px) {
-  .columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.notice.notice-error .notice-title {
+  color: var(--color-warn);
+}
+.notice.notice-ok .notice-title,
+.notice.notice-info .notice-title {
+  color: var(--color-navy);
 }
 
-details.lottery {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 8px 12px;
-  margin-bottom: 8px;
+/* ───────── ステータスと印 ───────── */
+
+/* ステータスは丸い札。分析中だけ紺地にして目立たせる */
+.status {
+  display: inline-block;
+  padding: 2px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid var(--color-border-input);
+  color: var(--color-text);
+  background: var(--color-surface);
 }
-details.lottery summary {
+.status-analyzing {
+  background: var(--color-navy);
+  border-color: var(--color-navy);
+  color: var(--color-on-dark);
+}
+.status-scheduled {
+  border-color: var(--color-navy);
+  color: var(--color-navy);
+}
+.status-skipped,
+.status-lost {
+  color: var(--color-text-sub);
+}
+
+/* 印（重複・条件外・再応募）は角の小さい札。重複と条件外は赤茶（確認が必要）、再応募は青（お知らせ） */
+.mark {
+  display: inline-block;
+  margin-right: 4px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.mark-duplicate {
+  background: var(--color-warn);
+  color: var(--color-on-dark);
+}
+.mark-ineligible {
+  background: var(--color-surface);
+  color: var(--color-warn);
+  border-color: var(--color-warn);
+}
+.mark-reapply {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+/* 「匿名希望」などの目立たない札 */
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-input);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--color-text-sub);
+  white-space: nowrap;
+}
+/* 「次に分析」の札。一覧で次に分析する1人にだけ付ける */
+.tag-next {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-on-dark);
+  background: var(--color-navy);
+  white-space: nowrap;
+}
+
+/* 「前回から変わった」を示す金の点 */
+.changed-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-gold);
+  flex: none;
+}
+
+/* ───────── 表 ───────── */
+
+/* 表を白いカードに入れ、狭い画面では横にスクロールできるようにする */
+.table-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+}
+thead th {
+  font-size: 13px;
+  color: var(--color-text-sub);
+  font-weight: 700;
+}
+
+/* 表が画面より広いときは、表だけを横にスクロールできるようにする */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* 応募一覧の表 */
+table.applications {
+  min-width: 1040px;
+}
+table.applications thead tr {
+  border-bottom: 1px solid var(--color-border);
+}
+table.applications th,
+table.applications td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+table.applications thead th {
+  padding: 12px 8px;
+}
+table.applications tr > :first-child {
+  padding-left: 16px;
+}
+table.applications tr > :last-child {
+  padding-right: 16px;
+}
+/* ステータスごとのまとまりの見出し（分析中・分析予定・未着手） */
+table.applications tr.group-heading th {
+  background: var(--color-ground-deep);
+  padding: 10px 16px;
+  font-weight: 400;
+}
+.group-title {
+  font-weight: 700;
+  color: var(--color-navy);
+  font-size: 16px;
+}
+.group-count {
+  margin-left: 8px;
+  color: var(--color-text-sub);
+}
+.group-note {
+  margin-left: 16px;
+  color: var(--color-text-sub);
+  font-size: 13px;
+}
+table.applications tbody tr.item {
+  border-top: 1px solid var(--color-row-line);
+  background: var(--color-surface);
+}
+table.applications tbody tr.item:hover {
+  background: var(--color-row-hover);
+}
+table.applications tbody tr.item.selected {
+  background: var(--color-row-selected);
+}
+/* ドラッグ中の行と、落とす場所の目印。動き（アニメーション）は付けず、見た目だけ変える */
+table.applications tbody tr.item.dragging {
+  opacity: 0.5;
+}
+table.applications tbody tr.item.drop-before {
+  box-shadow: inset 0 3px 0 var(--color-navy);
+}
+table.applications tbody tr.item.drop-after {
+  box-shadow: inset 0 -3px 0 var(--color-navy);
+}
+.applicant-name {
+  font-weight: 700;
+}
+/*
+ * 表の中のチェックボックス。チェックボックス自体は20pxと小さいので、まわりの label を44px四方にして、
+ * そこを押してもチェックが切り替わるようにする（押せるものは44px以上。handoff.md の8）
+ */
+.check-cell {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control-height);
+  min-height: var(--control-height);
+  margin: -12px;
   cursor: pointer;
 }
 
-/* 配信用画面: 遠くからでも読めるよう大きめの文字にする */
+/* 並べ替えのつまみ */
+.drag-handle {
+  width: 32px;
+  height: var(--control-height);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-sub);
+  cursor: grab;
+  padding: 0;
+}
+
+/* 印の意味の説明（一覧の下） */
+dl.legend {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+  font-size: 13px;
+  color: var(--color-text-sub);
+}
+dl.legend > div {
+  display: flex;
+  gap: 6px;
+}
+dl.legend dt {
+  font-weight: 700;
+  color: var(--color-warn);
+}
+dl.legend dt.info {
+  color: var(--color-info);
+}
+dl.legend dd {
+  margin: 0;
+}
+
+/* 項目と回答の表（詳細の「応募内容と前回との比較」、配信用画面） */
+table.answers {
+  min-width: 560px;
+}
+table.answers th,
+table.answers td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--color-row-line);
+}
+table.answers thead th {
+  padding: 8px 12px;
+  border-top: 0;
+}
+table.answers tr > :first-child {
+  padding-left: 0;
+  width: 11em;
+}
+table.answers tbody th {
+  font-weight: 400;
+  color: var(--color-text-sub);
+}
+table.answers tbody td.current {
+  font-weight: 700;
+}
+table.answers td.previous {
+  color: var(--color-text-sub);
+}
+.answer-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* 小さな一覧の表（抽選の対象など） */
+table.simple {
+  min-width: 480px;
+}
+table.simple th,
+table.simple td {
+  padding: 8px;
+  border-top: 1px solid var(--color-row-line);
+}
+table.simple thead th {
+  border-top: 0;
+}
+/* 抽選記録の中の表のように、狭い場所に置く小さな表 */
+table.simple.compact-table {
+  min-width: 0;
+  font-size: 13px;
+}
+table.simple tr > :first-child {
+  padding-left: 0;
+}
+table.simple tr.excluded {
+  color: var(--color-text-sub);
+}
+
+/* ───────── ステータスで絞り込むタブ ───────── */
+
+.status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.status-tab {
+  min-height: var(--control-height);
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-input);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-tab .count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* 「確認が必要」のタブは赤茶の枠 */
+.status-tab.warn {
+  border-color: var(--color-warn);
+  color: var(--color-warn);
+}
+.status-tab[aria-pressed='true'] {
+  background: var(--color-navy);
+  border-color: var(--color-navy);
+  color: var(--color-on-dark);
+}
+
+/* 絞り込みの入力欄を横に並べる（狭いと折り返す） */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+}
+.filters > .field {
+  flex: 1 1 160px;
+}
+.filters > .field.wide {
+  flex: 2 1 260px;
+}
+
+/* ───────── 選んだ応募をまとめて変えるバー ───────── */
+
+/* 紺地に白文字は「その画面でいちばん大事な1か所」にだけ使う。管理画面ではこのバー */
+.bulk-bar {
+  background: var(--color-navy);
+  color: var(--color-on-dark);
+  border-radius: var(--radius-card);
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  /* 動きは3か所だけ（handoff.md の6）。ここはそのうちの1つ: バーが出るとき */
+  animation: bulk-in 180ms ease-out;
+}
+.bulk-bar select {
+  border: 0;
+}
+.bulk-bar .button {
+  border: 0;
+}
+.bulk-bar .button.ghost {
+  border: 1px solid var(--color-on-dark-line);
+  background: transparent;
+  color: var(--color-on-dark);
+  font-weight: 400;
+}
+.bulk-bar .bulk-warning {
+  font-weight: 700;
+}
+@keyframes bulk-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ───────── 確認のダイアログ ───────── */
+
+dialog.confirm {
+  border: 0;
+  border-radius: var(--radius-card);
+  padding: 24px;
+  max-width: min(520px, calc(100vw - 32px));
+  color: var(--color-text);
+  box-shadow: 0 12px 40px var(--color-shadow);
+}
+dialog.confirm[open] {
+  /* 動きの2つ目: 確認のダイアログが開くとき */
+  animation: dialog-in 160ms ease-out;
+}
+dialog.confirm::backdrop {
+  background: var(--color-backdrop);
+}
+.confirm-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--color-navy);
+}
+.confirm-body {
+  margin: 0 0 20px;
+}
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ───────── 詳細画面 ───────── */
+
+.back-link {
+  font-size: 14px;
+  align-self: flex-start;
+  padding: 10px 0;
+}
+.detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+.detail-name {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 40px;
+  font-weight: 800;
+  color: var(--color-navy);
+  line-height: 1.2;
+}
+.detail-name small {
+  font-weight: 600;
+  font-size: 26px;
+  margin-left: 10px;
+}
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+.detail-head .simulator {
+  margin-left: auto;
+}
+/* 「書いてくれたこと」（目標・相談内容）は大きめの文字で読みやすく */
+.written h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--color-text-sub);
+}
+.written p {
+  margin: 0;
+  max-width: 40em;
+  font-size: 17px;
+}
+/* 分析済みにするときの入力欄をまとめる囲み */
+.inset {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--radius-control);
+  background: var(--color-ground);
+}
+ol.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+ol.history li {
+  padding: 8px 0;
+  border-top: 1px solid var(--color-row-line);
+  display: flex;
+  flex-direction: column;
+}
+ul.plain {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ul.plain li {
+  padding: 8px 0;
+  border-top: 1px solid var(--color-row-line);
+}
+details.more {
+  font-size: 14px;
+  color: var(--color-text-label);
+}
+details.more summary {
+  cursor: pointer;
+  padding: 10px 0;
+}
+.more-body {
+  padding-top: 4px;
+}
+/* 「変わった項目」の凡例（金の点と言葉） */
+.legend-dot {
+  gap: 6px;
+}
+/* 段落の上下の余白をなくす */
+.flush {
+  margin: 0;
+}
+/* カードの中で、横に伸ばさず左に寄せるリンクやボタン */
+.inline-link,
+.start {
+  align-self: flex-start;
+}
+.inline-link {
+  padding: 8px 0;
+}
+.label-color {
+  color: var(--color-text-label);
+}
+.settings-link {
+  margin-left: 12px;
+}
+input.number-input {
+  width: 96px;
+}
+/* 一覧に表示する応募がないときの文 */
+.empty-note {
+  margin: 0;
+  padding: 16px;
+  color: var(--color-text-sub);
+}
+
+/* ───────── 設定画面 ───────── */
+
+.settings-menu {
+  flex: 1 1 220px;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-menu a {
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  text-decoration: none;
+  color: var(--color-text-label);
+}
+.settings-menu a[aria-current='true'] {
+  background: var(--color-navy-soft);
+  color: var(--color-navy);
+  font-weight: 700;
+}
+.settings-body {
+  flex: 999 1 560px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.card-heading {
+  margin: 0;
+  font-size: 20px;
+  color: var(--color-navy);
+}
+.check-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+.check-option input {
+  width: 22px;
+  height: 22px;
+  margin-top: 2px;
+}
+.indented {
+  padding-left: 34px;
+}
+.card-footer {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-row-line);
+}
+
+/* ───────── 配信用画面（試作。段階5でデザイン案どおりに作り直す） ───────── */
+
 .stream {
   max-width: 1000px;
   margin: 0 auto;
@@ -302,10 +965,12 @@ details.lottery summary {
   font-size: 20px;
 }
 .stream-label {
-  color: var(--muted);
+  color: var(--color-text-sub);
   margin: 0;
 }
 .stream-name {
+  font-family: var(--font-heading);
+  color: var(--color-navy);
   font-size: 48px;
   margin: 8px 0 24px;
 }
@@ -328,7 +993,7 @@ details.lottery summary {
 }
 .stream-note {
   font-size: 14px;
-  color: var(--muted);
+  color: var(--color-text-sub);
 }
 .stream-controls {
   display: flex;
@@ -336,6 +1001,21 @@ details.lottery summary {
   align-items: center;
   margin-top: 48px;
   padding-top: 16px;
-  border-top: 1px dashed var(--border);
+  border-top: 1px dashed var(--color-border);
   font-size: 14px;
+}
+.error {
+  color: var(--color-warn);
+}
+
+/*
+ * OSの設定で「視差効果を減らす（動きを減らす）」にしている人には、動きを止める（handoff.md の6）。
+ * 乗り物酔いのように、画面の動きで気分が悪くなる人がいるため。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .bulk-bar,
+  dialog.confirm[open],
+  .stream-drawing {
+    animation: none;
+  }
 }
