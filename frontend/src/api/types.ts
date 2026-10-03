@@ -22,3 +22,8 @@ export function errorMessage(error: unknown): string {
   }
   return '通信に失敗しました。バックエンドが起動しているか確認してください'
 }
+
+/** ほかの人が先に変更していたため断られた（409、code が "conflict"）か。「最新の状態を読み込む」ボタンを出すかどうかに使う */
+export function isConflict(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'conflict'
+}

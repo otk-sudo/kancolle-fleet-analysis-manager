@@ -2,188 +2,310 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { fetchAllApplications } from '../api/applications'
 import { api } from '../api/client'
-import { errorMessage, type Application, type Lottery, type Settings } from '../api/types'
-import { formatDateTime } from '../labels'
+import { errorMessage, type Application, type Lottery } from '../api/types'
+import { useConfirm } from '../components/useConfirm'
+import FlagBadges from '../components/FlagBadges'
+import Notice from '../components/Notice'
+import { formatShortDateTime, hasBlockingFlag } from '../labels'
+
+/** 読み込むもの一式 */
+type Loaded = {
+  lotteryEnabled: boolean
+  lossBonusEnabled: boolean
+  lossBonusStrength: number
+  lotteries: Lottery[]
+  /** 「未着手」の応募（受付順） */
+  pending: Application[]
+  /** 抽選記録に名前を出すための「応募ID → 応募」の表 */
+  byId: Record<string, Application>
+}
 
 /**
- * 抽選（仕様 6章）。抽選設定の変更、まとめ抽選の実行、抽選記録の確認ができる。
- * 配信中の抽選（1人だけ）は配信用画面から行う。
+ * 抽選（仕様 6章）。まとめ抽選の実行と、これまでの抽選の確認ができる。
+ * 抽選の設定は「設定」画面にある。配信中に1人ずつ選ぶ抽選は、配信の画面で行う。
  */
 function LotteryPage() {
-  const [settings, setSettings] = useState<Settings | null>(null)
-  const [lotteries, setLotteries] = useState<Lottery[]>([])
-  // 抽選記録には応募IDしかないので、名前を出すために応募の一覧を「ID → 応募」の表にしておく
-  const [applications, setApplications] = useState<Record<string, Application>>({})
-  const [pendingCount, setPendingCount] = useState(0)
-  const [winners, setWinners] = useState(3)
+  const [loaded, setLoaded] = useState<Loaded | null>(null)
+  // 印（重複・条件外）があっても対象に含める応募のID
+  const [includeFlagged, setIncludeFlagged] = useState<Set<string>>(new Set())
+  const [winners, setWinners] = useState(1)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [dialog, confirm] = useConfirm()
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<{ loaded?: Loaded; error?: unknown }> => {
     const [settingsResponse, lotteriesResponse, applicationsResponse] = await Promise.all([
       api.GET('/settings/{kind}', { params: { path: { kind: 'lottery' } } }),
       api.GET('/lotteries', { params: { query: { limit: 20 } } }),
       fetchAllApplications({ order: 'received' }),
     ])
     if (!settingsResponse.data || !lotteriesResponse.data || applicationsResponse.error) {
-      setError(errorMessage(settingsResponse.error ?? lotteriesResponse.error ?? applicationsResponse.error))
-      return
+      return { error: settingsResponse.error ?? lotteriesResponse.error ?? applicationsResponse.error }
     }
-    setSettings(settingsResponse.data)
-    setLotteries(lotteriesResponse.data.items)
+    const value = settingsResponse.data.value
     const byId: Record<string, Application> = {}
     for (const application of applicationsResponse.items) {
       byId[application.id] = application
     }
-    setApplications(byId)
-    setPendingCount(applicationsResponse.items.filter((a) => a.status === 'pending').length)
+    return {
+      loaded: {
+        lotteryEnabled: value.enabled === true,
+        lossBonusEnabled: value.lossBonusEnabled === true,
+        lossBonusStrength: Number(value.lossBonusStrength ?? 1),
+        lotteries: lotteriesResponse.data.items,
+        pending: applicationsResponse.items.filter((a) => a.status === 'pending'),
+        byId,
+      },
+    }
+  }, [])
+
+  const applyResult = useCallback((result: { loaded?: Loaded; error?: unknown }) => {
+    if (!result.loaded) {
+      setError(errorMessage(result.error))
+      return
+    }
+    setLoaded(result.loaded)
+    setIncludeFlagged(new Set())
   }, [])
 
   useEffect(() => {
-    // APIからの読み込みは「外部との同期」なので effect で行う。setState は通信が終わった後（非同期）に呼ばれるため、
-    // lint が心配する「描画の連鎖」は起きない
-    // oxlint-disable-next-line react/set-state-in-effect
-    void load()
-  }, [load])
+    let ignore = false
+    void load().then((result) => {
+      if (!ignore) applyResult(result)
+    })
+    return () => {
+      ignore = true
+    }
+  }, [load, applyResult])
 
-  /** 設定の値を1つ変える（画面の上だけ。保存ボタンでAPIへ送る） */
-  function changeSetting(key: string, value: boolean | number) {
-    if (!settings) return
-    setSettings({ ...settings, value: { ...settings.value, [key]: value } })
+  if (!loaded) {
+    return error ? (
+      <Notice kind="error" title="抽選の情報を読み込めませんでした">
+        {error}
+      </Notice>
+    ) : (
+      <p>読み込み中…</p>
+    )
   }
 
-  async function saveSettings() {
-    if (!settings) return
-    const { error } = await api.PUT('/settings/{kind}', {
-      params: { path: { kind: 'lottery' } },
-      body: settings,
-    })
-    if (error) {
-      setError(errorMessage(error))
-      return
+  // 抽選の対象: 「未着手」で、印がないか、印があっても対象に含めると選んだもの。
+  // 同じ人（同じXのID）の応募は1人1回分だけ（受付が早いほう）。backend の LotteryService.candidates と同じ決め方
+  const seen = new Set<string>()
+  const rows = loaded.pending.map((application) => {
+    const flagged = hasBlockingFlag(application)
+    const included = !flagged || includeFlagged.has(application.id)
+    let counted = false
+    if (included && !seen.has(application.xId)) {
+      seen.add(application.xId)
+      counted = true
     }
-    setError('')
-    setMessage('抽選設定を保存しました')
-    await load()
+    return { application, flagged, included, counted }
+  })
+  const targetCount = rows.filter((row) => row.counted).length
+  // 重複が解消されていない人（重複の印がついた未着手の応募がある人）
+  const unresolved = loaded.pending.filter((a) => a.flags.some((flag) => flag.type === 'duplicate'))
+
+  function toggle(id: string) {
+    const next = new Set(includeFlagged)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    setIncludeFlagged(next)
   }
 
   async function runBulk() {
-    // 結果は元に戻せないので、実行前に確認する
-    if (!window.confirm(`「未着手」の応募から ${winners} 人を抽選します。外れた人は「落選」になります。よろしいですか？`)) {
-      return
-    }
-    const { data, error } = await api.POST('/lotteries', { body: { mode: 'bulk', winners } })
+    // 結果は元に戻せないので、実行前に内容を確かめてもらう
+    const ok = await confirm({
+      title: `${targetCount}人から${winners}人を抽選しますか？`,
+      body: (
+        <p className="readable">
+          当選した人は「分析予定」、外れた人は「落選」になります。抽選の結果は記録に残ります。
+          {loaded?.lossBonusEnabled && ' 落選した回数が多い人ほど当たりやすくなります（落選補正）。'}
+        </p>
+      ),
+      confirmLabel: `${winners}人を抽選する`,
+      danger: true,
+    })
+    if (!ok) return
+    const { data, error } = await api.POST('/lotteries', {
+      body: { mode: 'bulk', winners, includeFlagged: [...includeFlagged] },
+    })
     if (error || !data) {
+      setMessage('')
       setError(errorMessage(error))
       return
     }
     setError('')
-    setMessage(`抽選しました（対象 ${data.entries.length} 人、当選 ${data.entries.filter((e) => e.won).length} 人）`)
-    await load()
+    applyResult(await load())
+    setMessage(`抽選しました。${data.entries.length}人から${data.entries.filter((e) => e.won).length}人が当選しました。`)
   }
 
   function nameOf(applicationId: string) {
-    return applications[applicationId]?.admiralName ?? '（削除済み）'
+    const application = loaded?.byId[applicationId]
+    return application ? `${application.admiralName} 提督` : '（削除済みの応募）'
   }
 
-  const value = settings?.value ?? {}
-
   return (
-    <section>
-      <h1>抽選</h1>
-      {message && <p className="ok">{message}</p>}
-      {error && <p className="error">{error}</p>}
-
-      <div className="columns">
-        <div>
-          <h2>抽選設定</h2>
-          {settings && (
-            <div className="form">
-              <label className="inline">
-                <input
-                  type="checkbox"
-                  checked={value.enabled === true}
-                  onChange={(e) => changeSetting('enabled', e.target.checked)}
-                />
-                抽選を使う
-              </label>
-              <label className="inline">
-                <input
-                  type="checkbox"
-                  checked={value.lossBonusEnabled === true}
-                  onChange={(e) => changeSetting('lossBonusEnabled', e.target.checked)}
-                />
-                落選した回数に応じて当たりやすくする（落選補正）
-              </label>
-              <label>
-                補正の強さ（当たりやすさ = 1 + 落選回数 × 強さ）
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={Number(value.lossBonusStrength ?? 1)}
-                  onChange={(e) => changeSetting('lossBonusStrength', Number(e.target.value))}
-                />
-              </label>
-              <button type="button" onClick={() => void saveSettings()}>
-                設定を保存
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div>
-          <h2>まとめ抽選</h2>
-          <p>
-            「未着手」で印のない応募（いま {pendingCount} 件の未着手のうち、印のないもの）から抽選します。
-            当選は「分析予定」、外れは「落選」になります。
-          </p>
-          <div className="form">
-            <label>
-              当選人数
-              <input type="number" min={1} value={winners} onChange={(e) => setWinners(Number(e.target.value))} />
-            </label>
-            <button type="button" className="primary" onClick={() => void runBulk()} disabled={value.enabled !== true}>
-              抽選する
-            </button>
-            {value.enabled !== true && <p>抽選はオフになっています。</p>}
-          </div>
-        </div>
+    <>
+      {dialog}
+      <div>
+        <h1 className="page-title">抽選</h1>
+        <p className="page-lead">
+          受付を締め切ったあとに、未着手の応募からまとめて当選者を選びます。配信中に1人ずつ選ぶときは、配信の画面を使います。
+        </p>
+        <p className="page-lead label-color">
+          いまの設定:{' '}
+          {loaded.lossBonusEnabled
+            ? `落選補正あり（当たりやすさ ＝ 1 ＋ 落選回数 × ${loaded.lossBonusStrength}）`
+            : '落選補正なし（全員が同じ当たりやすさ）'}
+          <Link to="/settings" className="settings-link">
+            設定を変える
+          </Link>
+        </p>
       </div>
 
-      <h2>抽選記録</h2>
-      {lotteries.length === 0 && <p>まだ抽選していません。</p>}
-      {lotteries.map((lottery) => (
-        <details key={lottery.id} className="lottery">
-          <summary>
-            {formatDateTime(lottery.executedAt)} {lottery.mode === 'bulk' ? 'まとめ抽選' : '配信中の抽選'}（実行:{' '}
-            {lottery.executedBy}）当選: {lottery.entries.filter((e) => e.won).map((e) => nameOf(e.applicationId)).join('、')}
-          </summary>
-          <table className="list">
-            <thead>
-              <tr>
-                <th>提督名</th>
-                <th>当たりやすさ</th>
-                <th>結果</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lottery.entries.map((entry) => (
-                <tr key={entry.applicationId}>
-                  <td>
-                    <Link to={`/applications/${entry.applicationId}`}>{nameOf(entry.applicationId)}</Link>
-                  </td>
-                  <td>{entry.weight}</td>
-                  <td>{entry.won ? '当選' : '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {/* 同じ種と対象者なら同じ結果になる。後から公平性を確かめるために記録している（仕様 6.4） */}
-          <p className="meta">乱数の種: {lottery.seed}</p>
-        </details>
-      ))}
-    </section>
+      {error && (
+        <Notice kind="error" title="抽選できませんでした">
+          {error}
+        </Notice>
+      )}
+      {message && <Notice kind="ok" title={message} />}
+      {!loaded.lotteryEnabled && (
+        <Notice kind="error" title="抽選はオフになっています" action={<Link to="/settings">設定を開く</Link>}>
+          抽選するときは、設定で「抽選を使う」をオンにしてください。
+        </Notice>
+      )}
+
+      <div className="two-columns">
+        <section className="card main-column">
+          <h2 className="card-title">抽選の対象（{targetCount}人）</h2>
+
+          {unresolved.map((application) => (
+            <div key={application.id} role="note" className="notice notice-error">
+              <span className="notice-body">
+                <strong>{application.admiralName} 提督の重複が解消されていません。</strong>
+                このまま抽選すると、受付が早い方の応募だけが抽選に入ります。どちらの応募を残すか、先に決めておくのがおすすめです。
+              </span>
+              <Link to={`/applications/${application.id}`}>{application.admiralName} 提督の応募を確認する</Link>
+            </div>
+          ))}
+
+          {rows.length === 0 ? (
+            <p className="card-note">「未着手」の応募はありません。</p>
+          ) : (
+            <div className="table-scroll">
+              <table className="simple">
+                <thead>
+                  <tr>
+                    <th scope="col">対象に含める</th>
+                    <th scope="col">提督名</th>
+                    <th scope="col">印</th>
+                    <th scope="col">受付</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map(({ application, flagged, included, counted }) => (
+                    <tr key={application.id} className={counted ? undefined : 'excluded'}>
+                      <td>
+                        {/* 印のない応募は必ず対象になるので、外せない（チェックを変えられない） */}
+                        <input
+                          type="checkbox"
+                          aria-label={`${application.admiralName} 提督を抽選の対象に含める`}
+                          checked={included}
+                          disabled={!flagged}
+                          onChange={() => toggle(application.id)}
+                        />
+                      </td>
+                      <td>
+                        <Link className="applicant-name" to={`/applications/${application.id}`}>
+                          {application.admiralName}
+                        </Link>
+                        {included && !counted && <span className="tag">同じ人の先の応募が対象</span>}
+                      </td>
+                      <td>
+                        {application.flags.length > 0 ? <FlagBadges flags={application.flags} /> : '—'}
+                      </td>
+                      <td className="num sub">{formatShortDateTime(application.receivedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="card-note">
+            重複・条件外の印がある応募は、はじめは対象から外しています。チェックを入れると対象に戻せます。
+            {/* TODO(段階6): 対象者ごとの落選回数と当たりやすさ、抽選前の確認画面、一番新しい抽選の取り消しを足す */}
+          </p>
+        </section>
+
+        <aside className="side-column">
+          <section className="card compact">
+            <h2 className="card-title">まとめ抽選</h2>
+            <div className="field">
+              <label htmlFor="winners">当選人数</label>
+              <div className="row">
+                <input
+                  id="winners"
+                  type="number"
+                  min={1}
+                  max={Math.max(targetCount, 1)}
+                  value={winners}
+                  onChange={(e) => setWinners(Number(e.target.value))}
+                  className="number-input"
+                />
+                <span>人 ／ 対象 {targetCount}人</span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="button primary"
+              disabled={!loaded.lotteryEnabled || targetCount === 0 || winners < 1}
+              onClick={() => void runBulk()}
+            >
+              抽選の内容を確認する
+            </button>
+            <span className="field-help">次に出る確認で、内容を確かめてから抽選します。</span>
+          </section>
+
+          <section className="card compact">
+            <h2 className="card-title">これまでの抽選</h2>
+            {loaded.lotteries.length === 0 ? (
+              <p className="card-note">まだ抽選していません。</p>
+            ) : (
+              <ol className="history">
+                {loaded.lotteries.map((lottery) => {
+                  const won = lottery.entries.filter((e) => e.won)
+                  return (
+                    <li key={lottery.id}>
+                      <span className="num">
+                        {formatShortDateTime(lottery.executedAt)} {lottery.mode === 'bulk' ? 'まとめ抽選' : '配信中の抽選'}
+                      </span>
+                      <span className="small sub">
+                        {lottery.entries.length}人から{won.length}人が当選 ・ {lottery.executedBy}
+                      </span>
+                      <details className="more">
+                        <summary>当選した人と記録</summary>
+                        <ul className="plain">
+                          {won.map((entry) => (
+                            <li key={entry.applicationId}>
+                              <Link to={`/applications/${entry.applicationId}`}>{nameOf(entry.applicationId)}</Link>
+                            </li>
+                          ))}
+                        </ul>
+                        {/* 同じ種と対象者なら同じ結果になる。後から公平性を確かめるために記録している（仕様 6.4） */}
+                        <span className="small sub">乱数の種: {lottery.seed}</span>
+                      </details>
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
+          </section>
+        </aside>
+      </div>
+    </>
   )
 }
 

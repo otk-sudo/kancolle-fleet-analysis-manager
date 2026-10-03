@@ -2,7 +2,7 @@
 // APIではステータスや項目を英語のコード（例: "pending"）でやりとりし、画面に出すときだけ日本語に直す。
 // TODO(段階7): ステータスや項目は設定データから読み込む（仕様 10章）。試作では固定の表にしている
 
-import type { FlagType, SkipReason } from './api/types'
+import type { Application, FlagType, SkipReason } from './api/types'
 
 /** ステータスのコード → 表示名 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -82,4 +82,36 @@ export function formatDateTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+/** 日時を「09/29 13:15」の形にする（一覧のように狭い場所で使う） */
+export function formatShortDateTime(value: string): string {
+  return new Date(value).toLocaleString('ja-JP', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * 配信日（"2026-10-03" のような日付だけの文字列）を「10/03」の形にする。
+ * new Date("2026-10-03") は世界標準時の0時として読まれ、国によっては前の日になるので、文字列のまま切り出す
+ */
+export function formatShortDate(value: string): string {
+  const [, month, day] = value.split('-')
+  return `${month}/${day}`
+}
+
+/** 日付を「2026年6月14日」の形にする */
+export function formatLongDate(value: string): string {
+  return new Date(value).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })
+}
+
+/**
+ * 確認が必要な印（重複・条件外）があるか。backend の Application.hasBlockingFlag と同じ。
+ * この印がある「未着手」の人は、「次の人へ」で飛ばされ、抽選でもはじめは対象から外れる
+ */
+export function hasBlockingFlag(application: Application): boolean {
+  return application.flags.some((flag) => flag.type === 'duplicate' || flag.type === 'ineligible')
 }
