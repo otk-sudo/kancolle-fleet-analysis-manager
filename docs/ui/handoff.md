@@ -13,9 +13,9 @@
 | mockups/Main.dc.html | 管理画面：応募一覧 | 段階3 |
 | mockups/Detail.dc.html | 管理画面：応募詳細 | 段階3 |
 | mockups/Lottery.dc.html | 管理画面：抽選 | 段階3 |
-| mockups/Settings.dc.html | 管理画面：設定（抽選・配信用URLだけ描いています） | 段階3、7 |
-| mockups/Stream.dc.html | 配信用画面（1920×1080、分析中・抽選の結果・待機中） | 段階5 |
-| mockups/Panel.dc.html | 配信の操作パネル（PCのブラウザの別タブで使う） | 段階5 |
+| mockups/Settings.dc.html | 管理画面：設定（抽選・配信用URLだけ描いています。配信用URLは仕様 v1.2 でなくした） | 段階3、9 |
+| mockups/Stream.dc.html | 配信用画面（1920×1080、分析中・抽選の結果・待機中） | 段階7 |
+| mockups/Panel.dc.html | 配信の操作パネル（PCのブラウザの別タブで使う） | 段階7 |
 
 `.dc.html` はデザインツールの形式です。`{{...}}` や `<sc-for>` はReactにそのまま持ち込まず、見た目（色・余白・文字の大きさ・並べ方）とデータの見せ方だけを参考にしてください。
 
