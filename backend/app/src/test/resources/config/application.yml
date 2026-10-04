@@ -1,7 +1,0 @@
-# テストのときだけ足す設定。
-# Spring Boot は src/main/resources/application.yml に加えて、config/application.yml も読み込み、こちらを優先する。
-# テストでは本物の Cognito を使えないので、手元用の仮ログインにする（トークンは /dev/login でもらう）。
-
-app:
-  auth:
-    mode: dev

@@ -61,7 +61,6 @@ final class ApiMapper {
             HistoryEntry api = new HistoryEntry(
                     entry.id(),
                     toApi(entry.at()),
-                    entry.actor(),
                     HistoryEntry.KindEnum.fromValue(entry.kind().code()),
                     entry.from(),
                     entry.to());
@@ -108,7 +107,6 @@ final class ApiMapper {
                 record.id(),
                 Lottery.ModeEnum.fromValue(record.mode().code()),
                 toApi(record.executedAt()),
-                record.executedBy(),
                 // 種は64ビットの整数。JavaScriptの数値では桁が欠けるため、文字列で渡す
                 Long.toString(record.seed()),
                 entries);

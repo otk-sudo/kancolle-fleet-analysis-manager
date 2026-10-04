@@ -13,15 +13,12 @@ import io.github.otksudo.fleetanalysis.app.api.model.KeepRequest;
 import io.github.otksudo.fleetanalysis.app.api.model.MoveApplicationRequest;
 import io.github.otksudo.fleetanalysis.app.api.model.SkipReason;
 import io.github.otksudo.fleetanalysis.app.api.model.VersionedId;
-import io.github.otksudo.fleetanalysis.app.security.CurrentUsers;
 import io.github.otksudo.fleetanalysis.domain.InvalidValueException;
 import io.github.otksudo.fleetanalysis.domain.XId;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationChanges;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationFilter;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationService;
 import io.github.otksudo.fleetanalysis.domain.application.ApplicationStatus;
-import io.github.otksudo.fleetanalysis.domain.auth.CurrentUser;
-import io.github.otksudo.fleetanalysis.domain.auth.Permission;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -38,12 +35,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
 
     private final ApplicationService applicationService;
-    private final CurrentUsers users;
 
     // コンストラクターの引数に書いた部品は、Spring が自動で渡してくれる（ServiceConfig などで作ったもの）
-    public ApplicationsController(ApplicationService applicationService, CurrentUsers users) {
+    public ApplicationsController(ApplicationService applicationService) {
         this.applicationService = applicationService;
-        this.users = users;
     }
 
     @Override
@@ -56,7 +51,6 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
             String order,
             String cursor,
             Integer limit) {
-        users.require(Permission.VIEW);
         List<ApplicationStatus> statuses = new ArrayList<>();
         if (status != null) {
             for (String code : status) {
@@ -79,13 +73,11 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
 
     @Override
     public ResponseEntity<Application> getApplication(String applicationId) {
-        users.require(Permission.VIEW);
         return ResponseEntity.ok(ApiMapper.toApi(applicationService.get(applicationId)));
     }
 
     @Override
     public ResponseEntity<Application> updateApplication(String applicationId, ApplicationUpdate update) {
-        CurrentUser user = users.require(Permission.EDIT_APPLICATIONS);
         ApplicationChanges changes = ApplicationChanges.none()
                 .withStatus(update.getStatus() == null ? null : ApplicationStatus.fromCode(update.getStatus()))
                 .withSkipReason(toDomain(update.getSkipReason()))
@@ -98,26 +90,23 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
         if (Boolean.TRUE.equals(update.getClearStreamDate())) {
             changes = changes.withClearStreamDate();
         }
-        var updated = applicationService.update(applicationId, update.getVersion(), changes, user.displayName());
+        var updated = applicationService.update(applicationId, update.getVersion(), changes);
         return ResponseEntity.ok(ApiMapper.toApi(updated));
     }
 
     @Override
     public ResponseEntity<List<HistoryEntry>> listApplicationHistory(String applicationId) {
-        users.require(Permission.VIEW);
         return ResponseEntity.ok(ApiMapper.toApiHistory(applicationService.history(applicationId)));
     }
 
     @Override
     public ResponseEntity<Application> keepApplication(String applicationId, KeepRequest request) {
-        CurrentUser user = users.require(Permission.EDIT_APPLICATIONS);
-        var kept = applicationService.keep(applicationId, request.getVersion(), user.displayName());
+        var kept = applicationService.keep(applicationId, request.getVersion());
         return ResponseEntity.ok(ApiMapper.toApi(kept));
     }
 
     @Override
     public ResponseEntity<BulkStatusResponse> bulkChangeStatus(BulkStatusRequest request) {
-        CurrentUser user = users.require(Permission.EDIT_APPLICATIONS);
         List<ApplicationService.VersionedId> targets = new ArrayList<>();
         for (VersionedId item : request.getItems()) {
             targets.add(new ApplicationService.VersionedId(item.getId(), item.getVersion()));
@@ -125,14 +114,12 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
         var updated = applicationService.bulkChangeStatus(
                 targets,
                 ApplicationStatus.fromCode(request.getStatus()),
-                toDomain(request.getSkipReason()),
-                user.displayName());
+                toDomain(request.getSkipReason()));
         return ResponseEntity.ok(new BulkStatusResponse(ApiMapper.toApi(updated)));
     }
 
     @Override
     public ResponseEntity<Void> moveApplication(String applicationId, MoveApplicationRequest request) {
-        users.require(Permission.EDIT_APPLICATIONS);
         applicationService.move(applicationId, request.getAfter());
         // 204 No Content: 成功したが返す中身はない、という意味のHTTPステータス
         return ResponseEntity.noContent().build();
@@ -140,14 +127,11 @@ public class ApplicationsController implements ApplicationsApi, ApplicantsApi {
 
     @Override
     public ResponseEntity<List<Application>> listApplicantHistory(String xId) {
-        users.require(Permission.VIEW);
         return ResponseEntity.ok(ApiMapper.toApi(applicationService.sameApplicant(XId.parse(xId))));
     }
 
     @Override
     public ResponseEntity<Void> deleteApplicant(String xId) {
-        // 削除依頼への対応は運営だけ（仕様 2章）
-        users.require(Permission.DELETE_APPLICANT);
         applicationService.deleteApplicant(XId.parse(xId));
         return ResponseEntity.noContent().build();
     }

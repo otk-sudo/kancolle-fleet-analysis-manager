@@ -55,7 +55,6 @@ public class DynamoDbLotteryRepository implements LotteryRepository {
         item.put("id", s(record.id()));
         item.put("mode", s(record.mode().code()));
         item.put("executedAt", s(record.executedAt().toString()));
-        item.put("executedBy", s(record.executedBy()));
         item.put("seed", n(record.seed()));
         List<AttributeValue> entries = new ArrayList<>();
         for (LotteryRecord.Entry entry : record.entries()) {
@@ -136,7 +135,6 @@ public class DynamoDbLotteryRepository implements LotteryRepository {
                 getS(item, "id"),
                 LotteryMode.fromCode(getS(item, "mode")),
                 Instant.parse(getS(item, "executedAt")),
-                getS(item, "executedBy"),
                 getLong(item, "seed"),
                 entries);
     }

@@ -39,7 +39,6 @@ import org.junit.jupiter.api.Test;
  */
 class ApplicationServiceTest {
 
-    private static final String ACTOR = "テスト担当";
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-10-01T12:00:00Z"), ZoneOffset.UTC);
     private final InMemoryApplicationRepository repository = new InMemoryApplicationRepository();
@@ -60,7 +59,7 @@ class ApplicationServiceTest {
 
     /** 今の版を読み込んでから変える（画面で読み込んでから保存するのと同じ） */
     private Application change(String id, ApplicationChanges changes) {
-        return service.update(id, service.get(id).version(), changes, ACTOR);
+        return service.update(id, service.get(id).version(), changes);
     }
 
     private Application changeStatus(String id, ApplicationStatus status) {
@@ -173,7 +172,7 @@ class ApplicationServiceTest {
 
         // 抽選で落選になった応募は、手では未着手に戻せない（抽選の取り消しでだけ戻る）
         Application lost = service.get(application.id());
-        lost.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), ACTOR, "抽選で落選");
+        lost.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), "抽選で落選");
         repository.save(lost);
         assertThatThrownBy(() -> changeStatus(application.id(), ApplicationStatus.PENDING))
                 .isInstanceOf(ConflictException.class);
@@ -193,7 +192,6 @@ class ApplicationServiceTest {
         assertThat(history.get(0).kind()).isEqualTo(HistoryEntry.Kind.STATUS);
         assertThat(history.get(0).from()).isEqualTo("pending");
         assertThat(history.get(0).to()).isEqualTo("skipped");
-        assertThat(history.get(0).actor()).isEqualTo(ACTOR);
         assertThat(history.get(0).note()).contains("本人の取り下げ");
 
         // 見送りから戻すと、理由は消える
@@ -207,11 +205,11 @@ class ApplicationServiceTest {
         long version = service.get(application.id()).version();
 
         // 1人目が保存する（版が進む）
-        service.update(application.id(), version, ApplicationChanges.none().withMemo("1人目"), ACTOR);
+        service.update(application.id(), version, ApplicationChanges.none().withMemo("1人目"));
 
         // 2人目は古い版のまま保存しようとする → 断られ、1人目のメモは消えない
         assertThatThrownBy(() -> service.update(
-                application.id(), version, ApplicationChanges.none().withMemo("2人目"), ACTOR))
+                application.id(), version, ApplicationChanges.none().withMemo("2人目")))
                 .isInstanceOf(ConflictException.class);
         assertThat(service.get(application.id()).memo()).isEqualTo("1人目");
     }
@@ -274,7 +272,7 @@ class ApplicationServiceTest {
         Application old = submit("s1", "@a", "2026-10-01T10:00:00Z");
         Application resent = submit("s2", "@a", "2026-10-01T11:00:00Z");
 
-        service.keep(resent.id(), service.get(resent.id()).version(), ACTOR);
+        service.keep(resent.id(), service.get(resent.id()).version());
 
         Application skipped = service.get(old.id());
         assertThat(skipped.status()).isEqualTo(ApplicationStatus.SKIPPED);
@@ -297,7 +295,7 @@ class ApplicationServiceTest {
         changeStatus(other.id(), ApplicationStatus.SCHEDULED); // 当選した人の後ろに並ぶ
         long inheritedPosition = service.get(won.id()).position();
 
-        Application kept = service.keep(resent.id(), service.get(resent.id()).version(), ACTOR);
+        Application kept = service.keep(resent.id(), service.get(resent.id()).version());
 
         assertThat(kept.status()).isEqualTo(ApplicationStatus.SCHEDULED);
         assertThat(kept.position()).isEqualTo(inheritedPosition);
@@ -315,7 +313,7 @@ class ApplicationServiceTest {
         changeStatus(scheduled.id(), ApplicationStatus.SCHEDULED);
         long position = service.get(scheduled.id()).position();
 
-        Application kept = service.keep(scheduled.id(), service.get(scheduled.id()).version(), ACTOR);
+        Application kept = service.keep(scheduled.id(), service.get(scheduled.id()).version());
 
         assertThat(kept.status()).isEqualTo(ApplicationStatus.SCHEDULED);
         assertThat(kept.position()).isEqualTo(position);
@@ -328,7 +326,7 @@ class ApplicationServiceTest {
         Application resent = submit("s2", "@a", "2026-10-01T11:00:00Z");
         changeStatus(analyzing.id(), ApplicationStatus.ANALYZING);
 
-        assertThatThrownBy(() -> service.keep(resent.id(), service.get(resent.id()).version(), ACTOR))
+        assertThatThrownBy(() -> service.keep(resent.id(), service.get(resent.id()).version()))
                 .isInstanceOf(ConflictException.class);
         assertThat(service.get(resent.id()).status()).isEqualTo(ApplicationStatus.PENDING);
     }
@@ -343,7 +341,7 @@ class ApplicationServiceTest {
         List<Application> updated = service.bulkChangeStatus(
                 List.of(new VersionedId(a.id(), service.get(a.id()).version()),
                         new VersionedId(b.id(), service.get(b.id()).version())),
-                ApplicationStatus.SKIPPED, SkipReason.INELIGIBLE, ACTOR);
+                ApplicationStatus.SKIPPED, SkipReason.INELIGIBLE);
 
         assertThat(updated).extracting(Application::id).containsExactly(a.id(), b.id());
         assertThat(service.get(a.id()).status()).isEqualTo(ApplicationStatus.SKIPPED);
@@ -361,7 +359,7 @@ class ApplicationServiceTest {
         assertThatThrownBy(() -> service.bulkChangeStatus(
                 List.of(new VersionedId(pending.id(), service.get(pending.id()).version()),
                         new VersionedId(done.id(), service.get(done.id()).version())),
-                ApplicationStatus.SCHEDULED, null, ACTOR))
+                ApplicationStatus.SCHEDULED, null))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("提督s2");
         assertThat(service.get(pending.id()).status()).isEqualTo(ApplicationStatus.PENDING);
@@ -376,7 +374,7 @@ class ApplicationServiceTest {
 
         assertThatThrownBy(() -> service.bulkChangeStatus(
                 List.of(new VersionedId(a.id(), service.get(a.id()).version()), new VersionedId(b.id(), staleVersionOfB)),
-                ApplicationStatus.SKIPPED, SkipReason.INELIGIBLE, ACTOR))
+                ApplicationStatus.SKIPPED, SkipReason.INELIGIBLE))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("ほかの人が先に変更しました");
         assertThat(service.get(a.id()).status()).isEqualTo(ApplicationStatus.PENDING);
@@ -386,7 +384,7 @@ class ApplicationServiceTest {
     void まとめては分析中にできない() {
         Application a = submit("s1", "@a", "2026-10-01T10:00:00Z");
         assertThatThrownBy(() -> service.bulkChangeStatus(
-                List.of(new VersionedId(a.id(), service.get(a.id()).version())), ApplicationStatus.ANALYZING, null, ACTOR))
+                List.of(new VersionedId(a.id(), service.get(a.id()).version())), ApplicationStatus.ANALYZING, null))
                 .isInstanceOf(InvalidValueException.class);
     }
 
@@ -400,7 +398,7 @@ class ApplicationServiceTest {
         service.bulkChangeStatus(
                 List.of(new VersionedId(second.id(), service.get(second.id()).version()),
                         new VersionedId(first.id(), service.get(first.id()).version())),
-                ApplicationStatus.SCHEDULED, null, ACTOR);
+                ApplicationStatus.SCHEDULED, null);
 
         assertThat(queue()).containsExactly(third.id(), first.id(), second.id());
     }
@@ -502,16 +500,16 @@ class ApplicationServiceTest {
         changeStatus(scheduled.id(), ApplicationStatus.SCHEDULED);
 
         // 分析予定が未着手より先
-        Optional<StreamView> view = service.advanceStream(true, ACTOR);
+        Optional<StreamView> view = service.advanceStream(true);
         assertThat(service.get(current.id()).status()).isEqualTo(ApplicationStatus.DONE);
         assertThat(view).map(StreamView::applicationId).contains(scheduled.id());
 
         // 次は未着手のうち、印のない人
-        view = service.advanceStream(true, ACTOR);
+        view = service.advanceStream(true);
         assertThat(view).map(StreamView::applicationId).contains(pending.id());
 
         // 残りは重複の印つきの2件目だけなので選ばれず、分析済みにするだけで空になる
-        view = service.advanceStream(true, ACTOR);
+        view = service.advanceStream(true);
         assertThat(view).isEmpty();
         assertThat(service.get(pending.id()).status()).isEqualTo(ApplicationStatus.DONE);
     }
@@ -523,7 +521,7 @@ class ApplicationServiceTest {
         changeStatus(current.id(), ApplicationStatus.ANALYZING);
 
         // 分析予定の人がいないので、分析済みにするだけ（未着手の人は抽選で選ぶ）
-        assertThat(service.advanceStream(false, ACTOR)).isEmpty();
+        assertThat(service.advanceStream(false)).isEmpty();
         assertThat(service.get(current.id()).status()).isEqualTo(ApplicationStatus.DONE);
     }
 
@@ -534,7 +532,7 @@ class ApplicationServiceTest {
         // 配信者さんが印を確かめたうえで分析予定にした
         changeStatus(duplicate.id(), ApplicationStatus.SCHEDULED);
 
-        assertThat(service.advanceStream(true, ACTOR)).map(StreamView::applicationId).contains(duplicate.id());
+        assertThat(service.advanceStream(true)).map(StreamView::applicationId).contains(duplicate.id());
     }
 
     // ---- 削除依頼（仕様 8.1） ----

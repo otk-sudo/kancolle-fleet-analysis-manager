@@ -37,7 +37,6 @@ public class DemoDataLoader implements ApplicationRunner {
     private static final String SIMULATOR_URL = "https://noro6.github.io/kc-web/#/";
     private static final ZoneId JAPAN = ZoneId.of("Asia/Tokyo");
     /** サンプルの変更を行った人として履歴に残す名前 */
-    private static final String ACTOR = "サンプルデータ";
 
     private final ApplicationService applicationService;
     private final ApplicationRepository repository;
@@ -65,7 +64,7 @@ public class DemoDataLoader implements ApplicationRunner {
         Application analyzed = applicationService.get(past.id());
         applicationService.update(past.id(), analyzed.version(), ApplicationChanges.none()
                 .withAnalysisMemo("基地航空隊の熟練度が低め。陸攻の数を増やすと楽になる")
-                .withArchiveUrl("https://www.youtube.com/watch?v=example&t=1234"), ACTOR);
+                .withArchiveUrl("https://www.youtube.com/watch?v=example&t=1234"));
         Application current = submit(3, "demo_teitoku01", "朝霧", false, "3〜5年", "〜5,000円", "継続2群", "イベント",
                 "次のイベントで全海域甲を目指したい", "前回のアドバイスで基地航空隊を見直しました");
         changeStatus(current, ApplicationStatus.ANALYZING);
@@ -75,7 +74,7 @@ public class DemoDataLoader implements ApplicationRunner {
                 "まずは改二を増やしたい", null);
         changeStatus(scheduled1, ApplicationStatus.SCHEDULED);
         applicationService.update(scheduled1.id(), applicationService.get(scheduled1.id()).version(),
-                ApplicationChanges.none().withStreamDate(LocalDate.now(clock.withZone(JAPAN)).plusDays(3)), ACTOR);
+                ApplicationChanges.none().withStreamDate(LocalDate.now(clock.withZone(JAPAN)).plusDays(3)));
         Application scheduled2 = submit(9, "demo_teitoku03", "白露", false, "5〜10年", "〜10,000円", "継続1群", "演習",
                 "演習で勝率を上げたい", null);
         changeStatus(scheduled2, ApplicationStatus.SCHEDULED);
@@ -101,7 +100,7 @@ public class DemoDataLoader implements ApplicationRunner {
         Application skipped = submit(20, "demo_teitoku11", "天霧", false, "1〜3年", "0円", "戦果やらない", "通常海域", "1-5のクリア", null);
         Application skippedNow = applicationService.get(skipped.id());
         applicationService.update(skipped.id(), skippedNow.version(), ApplicationChanges.none()
-                .withStatus(ApplicationStatus.SKIPPED).withSkipReason(SkipReason.WITHDRAWN), ACTOR);
+                .withStatus(ApplicationStatus.SKIPPED).withSkipReason(SkipReason.WITHDRAWN));
     }
 
     private Application submit(
@@ -142,7 +141,7 @@ public class DemoDataLoader implements ApplicationRunner {
     private void changeStatus(Application application, ApplicationStatus... steps) {
         for (ApplicationStatus step : steps) {
             long version = applicationService.get(application.id()).version();
-            applicationService.update(application.id(), version, ApplicationChanges.none().withStatus(step), ACTOR);
+            applicationService.update(application.id(), version, ApplicationChanges.none().withStatus(step));
         }
     }
 
@@ -152,7 +151,7 @@ public class DemoDataLoader implements ApplicationRunner {
      */
     private void markLost(Application application) {
         Application loaded = applicationService.get(application.id());
-        loaded.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), ACTOR, "抽選で落選（サンプル）");
+        loaded.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), "抽選で落選（サンプル）");
         repository.save(loaded);
     }
 }

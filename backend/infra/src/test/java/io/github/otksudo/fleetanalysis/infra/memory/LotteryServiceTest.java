@@ -47,7 +47,7 @@ class LotteryServiceTest {
     /** 過去の抽選で落選したことにする（「落選」は抽選でだけ付くので、仕組みが行う変更で付ける） */
     private void markLost(Application application) {
         Application loaded = applicationService.get(application.id());
-        loaded.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), "tester", "抽選で落選");
+        loaded.changeStatusBySystem(ApplicationStatus.LOST, null, clock.instant(), "抽選で落選");
         applications.save(loaded);
     }
 
@@ -58,7 +58,7 @@ class LotteryServiceTest {
         submit("s3", "b", "2026-10-01T12:00:00Z");
 
         // 対象は1件目と別の人の2人で、当選は1人。どちらが当たるかは乱数で決まる
-        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 1, Set.of(), "tester");
+        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 1, Set.of());
         boolean firstWon = record.entries().stream().anyMatch(e -> e.applicationId().equals(first.id()) && e.won());
 
         // 1件目が当選（分析予定＝まだ終わっていない）なら「重複」のまま、落選なら「再応募」に変わる
@@ -104,7 +104,7 @@ class LotteryServiceTest {
         };
         LotteryService service = new LotteryService(flaky, lotteries, clock);
 
-        service.run(LotteryMode.BULK, 1, Set.of(), "tester");
+        service.run(LotteryMode.BULK, 1, Set.of());
 
         assertThat(lotteries.findAll()).hasSize(1);
         Application reloadedB = applicationService.get(b.id());
@@ -119,7 +119,7 @@ class LotteryServiceTest {
         submit("s2", "b", "2026-10-01T10:01:00Z");
         submit("s3", "c", "2026-10-01T10:02:00Z");
 
-        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 1, Set.of(), "tester");
+        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 1, Set.of());
 
         assertThat(record.entries()).hasSize(3);
         assertThat(record.entries()).filteredOn(LotteryRecord.Entry::won).hasSize(1);
@@ -132,7 +132,7 @@ class LotteryServiceTest {
         submit("s1", "a", "2026-10-01T10:00:00Z");
         submit("s2", "b", "2026-10-01T10:01:00Z");
 
-        lotteryService.run(LotteryMode.LIVE, 99, Set.of(), "tester");
+        lotteryService.run(LotteryMode.LIVE, 99, Set.of());
 
         assertThat(applicationService.list(ApplicationFilter.statuses(ApplicationStatus.ANALYZING), "queue")).hasSize(1);
         assertThat(applicationService.list(ApplicationFilter.statuses(ApplicationStatus.PENDING), "queue")).hasSize(1);
@@ -143,7 +143,7 @@ class LotteryServiceTest {
         for (int i = 0; i < 6; i++) {
             submit("s" + i, "user" + i, "2026-10-01T10:0" + i + ":00Z");
         }
-        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 2, Set.of(), "tester");
+        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 2, Set.of());
 
         List<LotteryEntry> entries = new ArrayList<>();
         for (LotteryRecord.Entry entry : record.entries()) {
@@ -164,7 +164,7 @@ class LotteryServiceTest {
         assertThat(lotteryService.lossesSinceLastWin(current)).isEqualTo(2);
 
         // 当選するとリセットされる
-        lotteryService.run(LotteryMode.BULK, 1, Set.of(), "tester");
+        lotteryService.run(LotteryMode.BULK, 1, Set.of());
         Application next = submit("s4", "a", "2026-10-02T10:00:00Z");
         assertThat(lotteryService.lossesSinceLastWin(next)).isZero();
     }
@@ -174,7 +174,7 @@ class LotteryServiceTest {
         submit("s1", "a", "2026-10-01T10:00:00Z");
         Application duplicate = submit("s2", "a", "2026-10-01T11:00:00Z");
 
-        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 5, Set.of(), "tester");
+        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 5, Set.of());
         assertThat(record.entries()).extracting(LotteryRecord.Entry::applicationId).doesNotContain(duplicate.id());
     }
 
@@ -182,7 +182,7 @@ class LotteryServiceTest {
     void 抽選がオフなら実行できない() {
         submit("s1", "a", "2026-10-01T10:00:00Z");
         lotteryService.updateSettings(new LotterySettings(false, true, 1.0), 1);
-        assertThatThrownBy(() -> lotteryService.run(LotteryMode.BULK, 1, Set.of(), "tester"))
+        assertThatThrownBy(() -> lotteryService.run(LotteryMode.BULK, 1, Set.of()))
                 .isInstanceOf(ConflictException.class);
     }
 
@@ -198,7 +198,7 @@ class LotteryServiceTest {
         submit("s1", "a", "2026-10-01T10:00:00Z");
         Application duplicate = submit("s2", "a", "2026-10-01T11:00:00Z");
 
-        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 5, Set.of(duplicate.id()), "tester");
+        LotteryRecord record = lotteryService.run(LotteryMode.BULK, 5, Set.of(duplicate.id()));
         assertThat(record.entries()).hasSize(1);
     }
 
@@ -207,9 +207,9 @@ class LotteryServiceTest {
         Application analyzing = submit("s1", "a", "2026-10-01T10:00:00Z");
         submit("s2", "b", "2026-10-01T11:00:00Z");
         applicationService.update(analyzing.id(), applicationService.get(analyzing.id()).version(),
-                ApplicationChanges.none().withStatus(ApplicationStatus.ANALYZING), "tester");
+                ApplicationChanges.none().withStatus(ApplicationStatus.ANALYZING));
 
-        assertThatThrownBy(() -> lotteryService.run(LotteryMode.LIVE, 1, Set.of(), "tester"))
+        assertThatThrownBy(() -> lotteryService.run(LotteryMode.LIVE, 1, Set.of()))
                 .isInstanceOf(ConflictException.class);
     }
 }

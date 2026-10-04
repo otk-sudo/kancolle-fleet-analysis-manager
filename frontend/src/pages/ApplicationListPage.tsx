@@ -3,7 +3,6 @@ import { Link } from 'react-router'
 import { fetchAllApplications } from '../api/applications'
 import { api } from '../api/client'
 import { errorMessage, isConflict, type Application, type FlagType, type SkipReason } from '../api/types'
-import { useAuth } from '../auth/useAuth'
 import { useConfirm } from '../components/useConfirm'
 import FlagBadges from '../components/FlagBadges'
 import Notice from '../components/Notice'
@@ -92,8 +91,6 @@ function ApplicationListPage() {
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropTarget, setDropTarget] = useState<{ id: string; before: boolean } | null>(null)
   const [dialog, confirm] = useConfirm()
-  // 応募を変えてよい人か（関係者は見るだけ）。変えられない人には、選ぶ欄・並べ替えのつまみを出さない
-  const canEdit = useAuth().can('editApplications')
 
   const filtered = Boolean(purpose || rankingEffort || flag || keyword)
 
@@ -303,7 +300,7 @@ function ApplicationListPage() {
   const visible = items.filter(currentTab.match)
   // 並べ替えは、絞り込みなしで「これから分析する人」か「すべて」を見ているときだけ。
   // 絞り込んでいると、見えていない応募をまたいで動かすことになるため
-  const canReorder = canEdit && !filtered && (tab === 'open' || tab === 'all')
+  const canReorder = !filtered && (tab === 'open' || tab === 'all')
   const groups = GROUP_ORDER.map((status) => ({
     status,
     rows: sortGroup(
@@ -319,9 +316,8 @@ function ApplicationListPage() {
       <div>
         <h1 className="page-title">応募一覧</h1>
         <p className="page-lead">
-          次に分析する順に並んでいます。
-          {canEdit &&
-            '順番を変えるときは、行の左のつまみをドラッグしてください（つまみを選んで ↑ ↓ キーでも動かせます）。同じステータスの中で入れ替わります。'}
+          次に分析する順に並んでいます。順番を変えるときは、行の左のつまみをドラッグしてください（つまみを選んで ↑ ↓
+          キーでも動かせます）。同じステータスの中で入れ替わります。
         </p>
       </div>
 
@@ -415,7 +411,7 @@ function ApplicationListPage() {
       </form>
 
       {/* まとめての変更（1件以上選んだときだけ出す） */}
-      {canEdit && selected.size > 0 && (
+      {selected.size > 0 && (
         <div className="bulk-bar">
           <span className="bulk-warning">{selected.size}件を選んでいます</span>
           <label htmlFor="bulk">変更後のステータス</label>
@@ -453,25 +449,21 @@ function ApplicationListPage() {
         <table className="applications">
           <thead>
             <tr>
-              {canEdit && (
-                <>
-                  <th scope="col">
-                    <label className="check-cell">
-                      <input
-                        type="checkbox"
-                        aria-label="表示しているすべての応募を選ぶ"
-                        checked={allVisibleSelected}
-                        onChange={() =>
-                          setSelected(allVisibleSelected ? new Set() : new Set(visible.map((item) => item.id)))
-                        }
-                      />
-                    </label>
-                  </th>
-                  <th scope="col">
-                    <span className="visually-hidden">順番を動かす</span>
-                  </th>
-                </>
-              )}
+              <th scope="col">
+                <label className="check-cell">
+                  <input
+                    type="checkbox"
+                    aria-label="表示しているすべての応募を選ぶ"
+                    checked={allVisibleSelected}
+                    onChange={() =>
+                      setSelected(allVisibleSelected ? new Set() : new Set(visible.map((item) => item.id)))
+                    }
+                  />
+                </label>
+              </th>
+              <th scope="col">
+                <span className="visually-hidden">順番を動かす</span>
+              </th>
               <th scope="col">提督名</th>
               <th scope="col">XのID</th>
               <th scope="col">印</th>
@@ -485,7 +477,7 @@ function ApplicationListPage() {
           {groups.map((group) => (
             <tbody key={group.status}>
               <tr className="group-heading">
-                <th scope="colgroup" colSpan={canEdit ? 10 : 8}>
+                <th scope="colgroup" colSpan={10}>
                   <span className="group-title">{STATUS_LABELS[group.status]}</span>
                   <span className="group-count num">{group.rows.length}件</span>
                   <span className="group-note">{groupNote(group.status, lotteryEnabled)}</span>
@@ -504,36 +496,32 @@ function ApplicationListPage() {
                     onDragOver={(e) => onDragOver(e, item)}
                     onDrop={onDrop}
                   >
-                    {canEdit && (
-                      <>
-                        <td>
-                          {/* チェックボックスは小さいので、まわりの label まで押せる範囲にして44px以上にする */}
-                          <label className="check-cell">
-                            <input
-                              type="checkbox"
-                              aria-label={`${item.admiralName} 提督を選ぶ`}
-                              checked={selected.has(item.id)}
-                              onChange={() => toggle(item.id)}
-                            />
-                          </label>
-                        </td>
-                        <td>
-                          {draggable && (
-                            <button
-                              type="button"
-                              className="drag-handle"
-                              draggable
-                              aria-label={`${item.admiralName} 提督の順番を動かす（↑ ↓ キー）`}
-                              onDragStart={(e) => onDragStart(e, item)}
-                              onDragEnd={endDrag}
-                              onKeyDown={(e) => onHandleKey(e, item)}
-                            >
-                              <GripIcon />
-                            </button>
-                          )}
-                        </td>
-                      </>
-                    )}
+                    <td>
+                      {/* チェックボックスは小さいので、まわりの label まで押せる範囲にして44px以上にする */}
+                      <label className="check-cell">
+                        <input
+                          type="checkbox"
+                          aria-label={`${item.admiralName} 提督を選ぶ`}
+                          checked={selected.has(item.id)}
+                          onChange={() => toggle(item.id)}
+                        />
+                      </label>
+                    </td>
+                    <td>
+                      {draggable && (
+                        <button
+                          type="button"
+                          className="drag-handle"
+                          draggable
+                          aria-label={`${item.admiralName} 提督の順番を動かす（↑ ↓ キー）`}
+                          onDragStart={(e) => onDragStart(e, item)}
+                          onDragEnd={endDrag}
+                          onKeyDown={(e) => onHandleKey(e, item)}
+                        >
+                          <GripIcon />
+                        </button>
+                      )}
+                    </td>
                     <td className="nowrap">
                       <Link className="applicant-name" to={`/applications/${item.id}`}>
                         {item.admiralName}

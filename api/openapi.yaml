@@ -1,106 +1,28 @@
 openapi: 3.1.0
 info:
   title: 艦隊分析 応募者管理API
-  version: 0.3.0
-  description: 艦隊分析への応募を管理するAPI。仕様は docs/spec.md を参照。
+  version: 0.4.0
+  description: |
+    艦隊分析への応募を管理するAPI。仕様は docs/spec.md を参照。
+
+    ツールは配信者さんのPCの中だけで動き（仕様 v1.2）、ログインはない。
+    代わりに、ほかのWebサイトからの攻撃を防ぐため、すべてのAPIで次を確かめる（docs/design.md 1章）。
+    どちらかに当てはまらない要求は 403（code は forbidden_origin）になる。
+    - Host ヘッダーが 127.0.0.1:<ポート> か localhost:<ポート> であること
+    - データを変える要求（POST・PUT・PATCH・DELETE）では、Origin ヘッダーがツール自身であること（Origin がない要求は通す）
 servers:
-  - url: https://api.example.com
-    description: 本番（ドメインは未定）
-security:
-  - cognito: []
+  - url: http://127.0.0.1:8080
+    description: 配信者さんのPCで動いているツール（ポートは段階6で決める）
+# ログインはないので、どのAPIにも認証（トークンなど）を求めない。空の一覧で「認証なし」をはっきり書く
+security: []
 tags:
-  - name: intake
   - name: applications
   - name: applicants
   - name: stream
   - name: lotteries
   - name: settings
-  - name: users
   - name: imports
-  - name: me
-  - name: devLogin
-    description: 手元で動かすときだけ使う仮ログイン（本番では使えない）
 paths:
-  /me:
-    get:
-      tags: [me]
-      operationId: getMe
-      summary: ログインしている人と、その人ができること
-      responses:
-        '200':
-          description: ログインしている人
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Me'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /dev/users:
-    get:
-      tags: [devLogin]
-      operationId: listDevUsers
-      summary: 仮ログインで選べるユーザー（手元で動かすときだけ）
-      security: []
-      responses:
-        '200':
-          description: 選べるユーザー
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DevUser'
-  /dev/login:
-    post:
-      tags: [devLogin]
-      operationId: devLogin
-      summary: 仮ログイン（手元で動かすときだけ）
-      description: |
-        選んだユーザーとしてログインしたことにして、トークン（JWT）を返す。
-        本番の Cognito のトークンと同じ形（役割は cognito:groups に入れる）にしているので、
-        サーバーの権限の確認は本番と同じ処理を通る。手元用の設定（app.auth.mode が dev）のときだけ使える。
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DevLoginRequest'
-      responses:
-        '200':
-          description: ログインできた
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DevLoginResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /intake/applications:
-    post:
-      tags: [intake]
-      operationId: submitApplication
-      summary: Googleフォームからの応募受付
-      security:
-        - formKey: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/IntakeRequest'
-      responses:
-        '201':
-          description: 受付完了
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IntakeResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
   /applications:
     get:
       tags: [applications]
@@ -144,16 +66,14 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 一覧
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApplicationPage'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /applications/{applicationId}:
     parameters:
       - $ref: '#/components/parameters/ApplicationId'
@@ -162,22 +82,20 @@ paths:
       operationId: getApplication
       summary: 応募詳細
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 詳細
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Application'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
     patch:
       tags: [applications]
       operationId: updateApplication
-      summary: ステータス・配信日・メモ・分析メモ・XのIDの変更（配信者・運営）
+      summary: ステータス・配信日・メモ・分析メモ・XのIDの変更
       description: |
         version には画面で読み込んだときの版を入れる。ほかの人が先に変更していて版が合わなければ 409（上書きしない）。
         ステータスは仕様 5.1 の表で「手で変えられる」組み合わせだけ変えられる。見送りにするときは skipReason が必要。
@@ -188,6 +106,8 @@ paths:
             schema:
               $ref: '#/components/schemas/ApplicationUpdate'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 更新後の応募
           content:
@@ -196,10 +116,6 @@ paths:
                 $ref: '#/components/schemas/Application'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -210,8 +126,10 @@ paths:
     get:
       tags: [applications]
       operationId: listApplicationHistory
-      summary: 応募の変更履歴（ステータス・XのIDを、いつ・誰が・何から何へ変えたか）
+      summary: 応募の変更履歴（ステータス・XのIDを、いつ・何から何へ変えたか）
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 履歴（古い順）
           content:
@@ -220,10 +138,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/HistoryEntry'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
   /applications/{applicationId}/keep:
@@ -243,6 +157,8 @@ paths:
             schema:
               $ref: '#/components/schemas/KeepRequest'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 残した応募（引き継いだあと）
           content:
@@ -251,10 +167,6 @@ paths:
                 $ref: '#/components/schemas/Application'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -274,6 +186,8 @@ paths:
             schema:
               $ref: '#/components/schemas/BulkStatusRequest'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 変更後の応募
           content:
@@ -282,10 +196,6 @@ paths:
                 $ref: '#/components/schemas/BulkStatusResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
@@ -296,7 +206,7 @@ paths:
     put:
       tags: [applications]
       operationId: moveApplication
-      summary: 次に分析する順の並べ替え（配信者・運営）
+      summary: 次に分析する順の並べ替え
       requestBody:
         required: true
         content:
@@ -309,12 +219,10 @@ paths:
                   type: [string, 'null']
               required: [after]
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '204':
           description: 並べ替え完了
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /applicants/{xId}/applications:
     parameters:
       - $ref: '#/components/parameters/XId'
@@ -323,6 +231,8 @@ paths:
       operationId: listApplicantHistory
       summary: 同じ応募者の応募履歴（過去応募との比較用）
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 履歴（新しい順）
           content:
@@ -331,112 +241,51 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Application'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /applicants/{xId}:
     parameters:
       - $ref: '#/components/parameters/XId'
     delete:
       tags: [applicants]
       operationId: deleteApplicant
-      summary: 削除依頼への対応（運営）
+      summary: 削除依頼への対応
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '204':
           description: 削除完了
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /stream/current:
     get:
       tags: [stream]
       operationId: getStreamView
       summary: 配信用画面の表示内容（いま分析中の1人）
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 表示内容。分析中の人がいなければ current は null
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /stream/next:
     post:
       tags: [stream]
       operationId: advanceStream
-      summary: 次の人へ進む（配信者・運営）
+      summary: 次の人へ進む
       description: |
         いま分析中の人を「分析済み」にし、「次に分析する順」の先頭の人を「分析中」にする。
         分析予定の人はそのまま選び、未着手の人は重複・条件外の印があれば飛ばす。
         抽選を使う設定のときは未着手の人を選ばない（抽選で選ぶため）。
         次の人がいなければ、分析済みにするだけで current は null になる。
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 進めた後の表示内容
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StreamView'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /stream/operators:
-    get:
-      tags: [stream]
-      operationId: listStreamOperators
-      summary: 関係者ごとの、配信の操作の許可（配信者・運営）
-      responses:
-        '200':
-          description: 関係者の一覧と、それぞれ許可しているか
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/StreamOperator'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /stream/operators/{userId}:
-    parameters:
-      - name: userId
-        in: path
-        required: true
-        schema:
-          type: string
-    put:
-      tags: [stream]
-      operationId: grantStreamOperator
-      summary: 関係者に配信の操作を許可する（配信者・運営）
-      responses:
-        '204':
-          description: 許可した
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '404':
-          $ref: '#/components/responses/NotFound'
-    delete:
-      tags: [stream]
-      operationId: revokeStreamOperator
-      summary: 関係者への配信の操作の許可を取り消す（配信者・運営）
-      responses:
-        '204':
-          description: 取り消した
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /lotteries:
     get:
       tags: [lotteries]
@@ -446,6 +295,8 @@ paths:
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 抽選記録（新しい順）
           content:
@@ -460,14 +311,10 @@ paths:
                   nextCursor:
                     type: [string, 'null']
                 required: [items, nextCursor]
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
     post:
       tags: [lotteries]
       operationId: runLottery
-      summary: 抽選の実行（配信者・運営）
+      summary: 抽選の実行
       requestBody:
         required: true
         content:
@@ -475,16 +322,14 @@ paths:
             schema:
               $ref: '#/components/schemas/LotteryRequest'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '201':
           description: 抽選結果
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Lottery'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '409':
           description: 抽選がオフ、または対象者がいない
           content:
@@ -504,20 +349,18 @@ paths:
       operationId: getSettings
       summary: 設定の取得
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 設定
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Settings'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
     put:
       tags: [settings]
       operationId: putSettings
-      summary: 設定の変更（配信者・運営）。versionが一致しないと409
+      summary: 設定の変更。versionが一致しないと409
       requestBody:
         required: true
         content:
@@ -525,90 +368,21 @@ paths:
             schema:
               $ref: '#/components/schemas/Settings'
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 更新後の設定
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Settings'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
-  /users:
-    get:
-      tags: [users]
-      operationId: listUsers
-      summary: ユーザー一覧（配信者・運営）
-      responses:
-        '200':
-          description: ユーザー一覧
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-    post:
-      tags: [users]
-      operationId: createUser
-      summary: ユーザー追加（配信者は関係者のみ、運営は全役割）
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  format: email
-                  description: ログイン用（応募者ではなくツール利用者のもの）
-                displayName:
-                  type: string
-                role:
-                  $ref: '#/components/schemas/Role'
-              required: [email, displayName, role]
-      responses:
-        '201':
-          description: 追加完了
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-  /users/{userId}:
-    parameters:
-      - name: userId
-        in: path
-        required: true
-        schema:
-          type: string
-    delete:
-      tags: [users]
-      operationId: deleteUser
-      summary: ユーザー削除（配信者は関係者のみ、運営は全役割）
-      responses:
-        '204':
-          description: 削除完了
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
   /imports/csv:
     post:
       tags: [imports]
       operationId: importCsv
-      summary: 旧スプレッドシートのCSV取り込み（運営）
+      summary: 旧スプレッドシートのCSV取り込み
       requestBody:
         required: true
         content:
@@ -626,6 +400,8 @@ paths:
                   type: string
               required: [file, mapping, formVersion]
       responses:
+        '403':
+          $ref: '#/components/responses/ForbiddenOrigin'
         '200':
           description: 取り込み結果
           content:
@@ -647,22 +423,7 @@ paths:
                         message:
                           type: string
                 required: [imported, skipped, errors]
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
 components:
-  securitySchemes:
-    cognito:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-      description: CognitoのIDトークン（手元では /dev/login の仮のトークン）。グループ（admin/streamer/staff）で権限を判定
-    formKey:
-      type: apiKey
-      in: header
-      name: X-Form-Key
-      description: Apps Scriptだけが持つ秘密キー
   parameters:
     ApplicationId:
       name: applicationId
@@ -698,14 +459,8 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ApiError'
-    Unauthorized:
-      description: 認証が必要（トークンがない・期限切れ・正しくない）
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiError'
-    Forbidden:
-      description: 権限がない（二段階認証をまだ設定していない配信者・運営は、どの操作もこれになる）
+    ForbiddenOrigin:
+      description: ほかのWebサイトからの要求なので断った（code は forbidden_origin。Host か Origin がツール自身でない）
       content:
         application/json:
           schema:
@@ -737,101 +492,10 @@ components:
     FlagType:
       type: string
       enum: [duplicate, reapply, ineligible]
-    Role:
-      type: string
-      enum: [admin, streamer, staff]
-    Permission:
-      type: string
-      description: |
-        できること。view=応募の閲覧、editApplications=応募の変更（ステータス・並べ替え・メモなど）、
-        streamOperation=配信の操作（次の人へ・配信中の抽選など）、bulkLottery=まとめ抽選、
-        editSettings=設定の変更、manageStreamOperators=関係者への配信の操作の許可、
-        manageUsers=ユーザー管理、deleteApplicant=削除依頼への対応、importCsv=CSV取り込み
-      enum: [view, editApplications, streamOperation, bulkLottery, editSettings, manageStreamOperators, manageUsers, deleteApplicant, importCsv]
-    Me:
-      type: object
-      properties:
-        id:
-          type: string
-        displayName:
-          type: string
-        role:
-          $ref: '#/components/schemas/Role'
-        mfaRequired:
-          type: boolean
-          description: 二段階認証（MFA）を設定するまで管理機能を使えない状態か（配信者・運営で、まだ設定していない）
-        streamOperator:
-          type: boolean
-          description: 関係者で、配信の操作を許可されているか
-        permissions:
-          type: array
-          items:
-            $ref: '#/components/schemas/Permission'
-      required: [id, displayName, role, mfaRequired, streamOperator, permissions]
-    StreamOperator:
-      type: object
-      properties:
-        userId:
-          type: string
-        displayName:
-          type: string
-        allowed:
-          type: boolean
-      required: [userId, displayName, allowed]
-    DevUser:
-      type: object
-      properties:
-        id:
-          type: string
-        displayName:
-          type: string
-        role:
-          $ref: '#/components/schemas/Role'
-        mfaConfigured:
-          type: boolean
-          description: 二段階認証を設定済みとして扱うか（設定していない人の画面を試すため）
-      required: [id, displayName, role, mfaConfigured]
-    DevLoginRequest:
-      type: object
-      properties:
-        userId:
-          type: string
-      required: [userId]
-    DevLoginResponse:
-      type: object
-      properties:
-        token:
-          type: string
-          description: APIを呼ぶときに Authorization ヘッダーで「Bearer トークン」として送る
-      required: [token]
     Answers:
       type: object
       description: フォーム回答。キーは設定の項目コード。版ごとに項目が変わるため自由形式
       additionalProperties: true
-    IntakeRequest:
-      type: object
-      properties:
-        submissionId:
-          type: string
-          description: フォームの回答ID。同じIDの再送は1件として扱う
-        submittedAt:
-          type: string
-          format: date-time
-        formVersion:
-          type: string
-        answers:
-          $ref: '#/components/schemas/Answers'
-      required: [submissionId, submittedAt, formVersion, answers]
-    IntakeResponse:
-      type: object
-      properties:
-        applicationId:
-          type: string
-        flags:
-          type: array
-          items:
-            $ref: '#/components/schemas/Flag'
-      required: [applicationId, flags]
     Flag:
       type: object
       properties:
@@ -985,9 +649,6 @@ components:
         at:
           type: string
           format: date-time
-        actor:
-          type: string
-          description: 変更した人
         kind:
           type: string
           enum: [status, xId]
@@ -1001,7 +662,7 @@ components:
         note:
           type: string
           description: 補足（見送りの理由、どの操作で変わったか、など）
-      required: [id, at, actor, kind, from, to]
+      required: [id, at, kind, from, to]
     StreamView:
       type: object
       properties:
@@ -1056,8 +717,6 @@ components:
         executedAt:
           type: string
           format: date-time
-        executedBy:
-          type: string
         seed:
           type: string
         entries:
@@ -1072,7 +731,7 @@ components:
               won:
                 type: boolean
             required: [applicationId, weight, won]
-      required: [id, mode, executedAt, executedBy, seed, entries]
+      required: [id, mode, executedAt, seed, entries]
     Settings:
       type: object
       properties:
@@ -1086,16 +745,3 @@ components:
           type: object
           additionalProperties: true
       required: [kind, version, value]
-    User:
-      type: object
-      properties:
-        id:
-          type: string
-        email:
-          type: string
-          format: email
-        displayName:
-          type: string
-        role:
-          $ref: '#/components/schemas/Role'
-      required: [id, email, displayName, role]
