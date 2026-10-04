@@ -51,7 +51,7 @@ public class DemoDataLoader implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        // すでに応募があれば何もしない（DynamoDB Local のように止めてもデータが残る保存先で、
+        // すでに応募があれば何もしない（SQLite のように止めてもデータが残る保存先で、
         // 起動するたびにサンプルが増えたり、ステータスの変更が失敗したりしないように）
         if (!repository.findAll().isEmpty()) {
             return;

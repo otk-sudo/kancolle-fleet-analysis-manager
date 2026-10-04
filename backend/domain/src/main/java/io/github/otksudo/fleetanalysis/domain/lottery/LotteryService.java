@@ -115,7 +115,8 @@ public class LotteryService {
         LotteryRecord record = new LotteryRecord(UUID.randomUUID().toString(), mode, now, seed, recordEntries);
         lotteries.save(record);
 
-        // 抽選の対象者は数百人になることがあり、1回のトランザクション（最大100件）に収まらないため、1件ずつ保存する。
+        // 1件ずつ保存する。以前の保存先（DynamoDB）は1回のトランザクションが最大100件で、数百人の対象者が収まらなかったため。
+        // SQLite にはこの制限がないので、全部を1回で保存する形にもできる。
         // TODO(段階8): 抽選の取り消しを作るときに、全部を確実にそろえる方法（再実行など）を見直す
         Set<String> candidateIds = candidateIds(candidates);
         for (Application application : changed.values()) {

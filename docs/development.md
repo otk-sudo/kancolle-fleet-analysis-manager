@@ -54,7 +54,8 @@
 - `domain` の業務ロジック（重複判定、条件ルール、抽選、ステータス遷移）は単体テスト必須
 - バグを直すときは、先にそのバグを再現するテストを書く
 - テストを無効化・スキップしてCIを通すことはしない
-- DynamoDB を使うテスト（`backend/infra` の `infra/dynamodb/`）は DynamoDB Local を使う。DynamoDB Local が中で使う部品（SQLite）が Linux（x86_64）・Windows（64bit）・Intel の Mac 用しか配られていないため、Apple シリコンの Mac や ARM の Linux では `./gradlew build` のテストが失敗する。その場合は GitHub Codespaces で動かすか、CI の結果で確かめる
+- SQLite に保存する部品のテスト（`backend/infra` の `infra/sqlite/`）は、テストごとに一時フォルダに新しいデータベースのファイルを作って使う（JUnit の `@TempDir`）。ほかのテストに前のデータが残らないようにするため
+- Spring Boot ごと動かすテスト（`backend/app`）は、保存先をメモリにしている（`app/src/test/resources/config/application.yml`）。SQLite で起動できるかは `SqliteStorageConfigTest` で確かめる
 
 ## 7. Git・PR
 - `main` へ直接プッシュしない。ブランチを切ってPRを出す

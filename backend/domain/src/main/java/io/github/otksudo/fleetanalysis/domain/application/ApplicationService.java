@@ -48,8 +48,8 @@ public class ApplicationService {
     public Application submit(IntakeCommand command) {
         // 「同じ回答IDがすでにあるか確かめる」と「保存する」の間に別のリクエストが割り込むと、二重に登録されてしまう。
         // 保存先を鍵（ロック）にして、同時に1つずつしか動かないようにする（抽選などほかの変更も同じ鍵を使う）。
-        // ただしこの鍵は1つのサーバーの中でしか効かない。本番（AWS Lambda）では複数のサーバーが同時に動くので、
-        // 保存先も「同じ回答IDがすでに別の応募として保存されていたら断る」ようにしてある（ConflictException）。
+        // 念のため、保存先も「同じ回答IDがすでに別の応募として保存されていたら断る」ようにしてある（ConflictException）。
+        // 鍵の付け忘れや、将来ほかのプログラムが同じデータベースに書いた場合でも、二重登録しないための最後の砦。
         // 断られたときは、先に保存された応募を返す（同じ回答の再送なので、受付済みとして扱ってよい）。
         synchronized (repository) {
             try {
@@ -67,7 +67,7 @@ public class ApplicationService {
         }
 
         Map<String, Object> answers = command.answers();
-        // 項目コードが空の回答は保存できない（DynamoDB は空の名前を受け付けない）ので、入力の誤りとして断る
+        // 項目コードが空の回答は、画面でどの項目かわからなくなるので、入力の誤りとして断る
         for (String key : answers.keySet()) {
             if (key == null || key.isBlank()) {
                 throw new InvalidValueException("回答の項目コードが空です");
@@ -272,9 +272,9 @@ public class ApplicationService {
     }
 
     /**
-     * 1回のまとめてのステータス変更で変えられる最大の件数（DynamoDB のトランザクションの最大100件に収まるように）。
-     * 1件につき応募と履歴の2件を書き、さらに印が変わった同じ人の応募も一緒に書くので、余裕をもって25件にしている。
-     * それでも超えたときは、保存先が「件数を減らしてやり直して」と断る（何も保存しない）。
+     * 1回のまとめてのステータス変更で変えられる最大の件数。
+     * 以前の保存先（DynamoDB）の「1回のトランザクションは100件まで」に収まるように決めた数。
+     * SQLite にはこの制限がないが、API の約束（api/openapi.yaml の maxItems）と画面を変えないよう、今は25件のままにしている。
      */
     public static final int BULK_LIMIT = 25;
 
